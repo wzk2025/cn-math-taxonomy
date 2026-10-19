@@ -181,6 +181,10 @@ svg.graph .n.shaky rect.body { fill: #fef3c7; stroke: #d97706; }
 .figbox .ln, .figure-body .ln { stroke: var(--text); stroke-width: 1.7; fill: none; stroke-linecap: round; }
 .figbox .ac, .figure-body .ac { stroke: var(--accent); stroke-width: 2.2; fill: none; stroke-linecap: round; }
 .figbox .mt, .figure-body .mt { stroke: var(--muted); stroke-width: 1.3; fill: none; }
+.figbox .mtf, .figure-body .mtf { fill: var(--muted); stroke: none; }
+.figbox .c2f, .figure-body .c2f { fill: #059669; stroke: none; }
+.figbox .c3f, .figure-body .c3f { fill: #d97706; stroke: none; }
+.figbox .bold, .figure-body .bold { font-weight: 600; }
 .figbox .c2, .figure-body .c2 { stroke: #059669; stroke-width: 2.2; fill: none; }
 .figbox .c3, .figure-body .c3 { stroke: #d97706; stroke-width: 2.2; fill: none; }
 .figbox .dash, .figure-body .dash { stroke-dasharray: 6 5; }
