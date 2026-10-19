@@ -4,6 +4,8 @@
   'use strict';
   const LS_STATUS = 'cnmDiagnose.topicStatus.v1';
   const LS_HISTORY = 'cnmDiagnose.history.v1';
+  const LS_NEXTDUE = 'cnmDiagnose.nextDue.v1';
+  const LS_FSRSCARDS = 'cnmDiagnose.fsrsCards.v1';
   const GRADE_ZH = { 7: '七', 8: '八', 9: '九' };
   const STATUS_LABEL = { mastered: '已掌握', shaky: '不稳', weak: '要先补' };
   const STATUS_ORDER = ['weak', 'shaky', 'mastered'];
@@ -140,6 +142,35 @@
     });
     root.append(domCard);
 
+    // ---------- 今日到期复习（FSRS 记忆曲线）----------
+    const nextDue = lsJson(LS_NEXTDUE, {});
+    const dueIds = Object.keys(nextDue).filter(function (id) { return new Date(nextDue[id].dueISO || 0) <= new Date(new Date().setHours(23, 59, 59, 999)); });
+    const upcoming = Object.keys(nextDue).filter(function (id) { return dueIds.indexOf(id) < 0; })
+      .sort(function (a, b) { return new Date(nextDue[a].dueISO) - new Date(nextDue[b].dueISO); });
+    if (Object.keys(nextDue).length) {
+      const dueCard = h('div', { class: 'card' }, h('h2', { text: '今日复习计划' }));
+      if (dueIds.length) {
+        dueCard.append(h('div', { class: 'row', style: 'margin-bottom:8px' },
+          h('button', {
+            class: 'primary',
+            onclick: function () { location.href = 'diagnose/?target=' + encodeURIComponent(dueIds.slice(0, 12).join(',')); }
+          }, '开始复习（' + Math.min(dueIds.length, 12) + ' 个）')));
+        dueIds.slice(0, 8).forEach(function (id) {
+          dueCard.append(h('div', { class: 'topic-row' },
+            h('span', { class: 'nm', text: nameOf(id) }),
+            h('span', { class: 'sec', text: '已逾期：' + new Date(nextDue[id].dueISO).toLocaleDateString('zh-CN') })));
+        });
+        if (dueIds.length > 8) dueCard.append(h('p', { class: 'muted small' }, '…以及另外 ' + (dueIds.length - 8) + ' 个'));
+      } else {
+        dueCard.append(h('p', { class: 'muted' }, '今天没有到期的复习。'));
+      }
+      if (upcoming.length) {
+        const u = upcoming[0];
+        dueCard.append(h('p', { class: 'muted small' }, '下一次复习：' + nameOf(u) + ' 在 ' + new Date(nextDue[u].dueISO).toLocaleDateString('zh-CN') + '（共安排了 ' + Object.keys(nextDue).length + ' 个知识点的复习计划）'));
+      }
+      root.append(dueCard);
+    }
+
     // ---------- 薄弱点清单 + 一键复习 ----------
     const weakIds = testedIds.filter(function (id) { return status[id] && status[id].s === 'weak'; });
     const shakyIds = testedIds.filter(function (id) { return status[id] && status[id].s === 'shaky'; });
@@ -194,7 +225,7 @@
           class: 'clear-btn',
           onclick: function () {
             if (confirm('确定清空全部画像数据吗？（诊断中的会话存档不受影响）')) {
-              [LS_STATUS, LS_HISTORY, 'cnmDiagnose.mastered.v1'].forEach(function (k) { localStorage.removeItem(k); });
+              [LS_STATUS, LS_HISTORY, LS_NEXTDUE, LS_FSRSCARDS, 'cnmDiagnose.mastered.v1'].forEach(function (k) { localStorage.removeItem(k); });
               render();
             }
           }
@@ -205,9 +236,11 @@
 
   function exportJson() {
     const out = {
-      tool: 'cn-math-taxonomy/portrait', version: 1,
+      tool: 'cn-math-taxonomy/portrait', version: 2,
       exportedAt: new Date().toISOString(),
       topicStatus: lsJson(LS_STATUS, {}),
+      nextDue: lsJson(LS_NEXTDUE, {}),
+      fsrsCards: lsJson(LS_FSRSCARDS, {}),
       history: lsJson(LS_HISTORY, [])
     };
     const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
@@ -238,6 +271,16 @@
           hist.sort(function (a, b) { return a.t - b.t; });
           localStorage.setItem(LS_STATUS, JSON.stringify(st));
           localStorage.setItem(LS_HISTORY, JSON.stringify(hist));
+          // FSRS 复习计划与卡片：导入方为准（备份文件是权威快照）
+          try {
+            if (d.nextDue) localStorage.setItem(LS_NEXTDUE, JSON.stringify(d.nextDue));
+            if (d.fsrsCards) {
+              const cur = lsJson(LS_FSRSCARDS, {});
+              const inc = d.fsrsCards;
+              Object.keys(cur).forEach(function (id) { if (!(id in inc)) inc[id] = cur[id]; });  // 补上本地新增
+              localStorage.setItem(LS_FSRSCARDS, JSON.stringify(inc));
+            }
+          } catch (e) { /* ignore */ }
           render();
         } catch (e) { alert('导入失败：' + e.message); }
       };

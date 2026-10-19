@@ -517,9 +517,18 @@
   }
 
   const LS_MASTERY = 'cnmDiagnose.mastered.v1';
-  /* 间隔复习：距上次诊断超过 3 天且仍有要补的知识点时，提醒复测 */
+  /* 间隔复习：FSRS 计算「今天到期」的知识点（或降级为3天前的薄弱提示），到期即提醒复测 */
   function reviewHint() {
     try {
+      // 首选 FSRS 到期队列
+      const due = fsrsDueToday();
+      if (due.length) {
+        const m = lsGet(LS_MASTERY) || {};
+        return h('div', { class: 'banner demo' },
+          '今天有 ' + due.length + ' 个知识点到了复习时间（按记忆曲线安排）· 先回画像页看看，或——',
+          h('button', { onclick: function () { startSession(due.slice(0, 12), '今日复习 ' + due.length + ' 个知识点'); } }, '现在就复习'));
+      }
+      // 降级：FSRS 还没数据（旧版本使用），沿用「3天前的薄弱点」提示
       const m = JSON.parse(localStorage.getItem(LS_MASTERY) || 'null');
       if (!m || !m.updatedAt || !m.weak || !m.weak.length) return null;
       const days = (Date.now() - new Date(m.updatedAt).getTime()) / 86400000;
@@ -530,6 +539,54 @@
         h('button', { onclick: function () { startSession(m.weak, '复习：' + (m.label || '上次要补的知识点')); } }, '现在就复习'));
     } catch (e) { return null; }
   }
+
+  /* ------------------------------------------------------------ FSRS 复习调度 */
+  // ts-fsrs（本地打包）：把诊断结果映射为评分，计算每个知识点的下次复习日期。
+  // 评分映射：对->Good，不稳->Hard，要先补->Again。enable_short_term=false 关闭分钟级学习阶段。
+  const FSRS_LS_SCHED = 'cnmDiagnose.fsrsCards.v1';   // 知识点 -> ts-fsrs card 对象（可 JSON 序列化）
+  const FSRS = window.FSRS || null;
+  const fsrsScheduler = FSRS
+    ? FSRS.fsrs(FSRS.generatorParameters({ enable_short_term: false, enable_fuzz: true, desired_retention: 0.9 }))
+    : null;
+  // 诊断状态 -> FSRS 评分
+  const STATUS_TO_RATING = { mastered: 3 /*Good*/, shaky: 2 /*Hard*/, weak: 1 /*Again*/ };
+
+  function fsrsCardsMap() {
+    try { return JSON.parse(localStorage.getItem(FSRS_LS_SCHED) || '{}'); } catch (e) { return {}; }
+  }
+  function fsrsSaveCards(map) {
+    try { localStorage.setItem(FSRS_LS_SCHED, JSON.stringify(map)); } catch (e) { /* ignore */ }
+  }
+  // 用 FSRS 更新一个知识点的复习计划；返回更新后的 {card, dueISO}，库缺失时退化为简单规则
+  function fsrsReview(topicId, status, now) {
+    const cards = fsrsCardsMap();
+    const when = now || new Date();
+    let card = cards[topicId];
+    if (!fsrsScheduler) {
+      const gapDays = status === 'weak' ? 1 : status === 'shaky' ? 3 : 7;
+      const due = new Date(when.getTime() + gapDays * 86400000);
+      return { dueISO: due.toISOString(), days: gapDays };
+    }
+    if (!card) card = FSRS.createEmptyCard(when);
+    else card = FSRS.fixState ? FSRS.fixState(card) : card;  // 反序列化后恢复 State 枚举
+    const rating = STATUS_TO_RATING[status] || 3;
+    const result = fsrsScheduler.next(card, when, rating);
+    cards[topicId] = result.card;
+    fsrsSaveCards(cards);
+    return {
+      dueISO: new Date(result.card.due).toISOString(),
+      days: result.card.scheduled_days,
+      stability: result.card.stability
+    };
+  }
+  // 画像/开始页用：列出今天到期（或已逾期）的知识点
+  function fsrsDueToday() {
+    const cards = fsrsCardsMap();
+    const today = new Date(); today.setHours(23, 59, 59, 999);
+    return Object.keys(cards).filter(function (id) { return new Date(cards[id].due) <= today; });
+  }
+  // 供画像页复用（画像页加载 engine.js，不加载 app.js）
+  window.CnmFSRS = { cardsMap: fsrsCardsMap, review: fsrsReview, dueToday: fsrsDueToday, STATUS_TO_RATING: STATUS_TO_RATING };
 
   /* 把最新一次诊断的结果写入共享 localStorage：
    * - mastered.v1：最近一次的汇总（开始页复习提示用）
@@ -549,6 +606,17 @@
       sum.shaky.forEach(function (id) { st[id] = { s: 'shaky', t: ts }; });
       sum.weak.forEach(function (id) { st[id] = { s: 'weak', t: ts }; });
       localStorage.setItem('cnmDiagnose.topicStatus.v1', JSON.stringify(st));
+      // FSRS：为本次测到的每个知识点计算下次复习日期，写入 nextDue 供画像/开始页用
+      const nextDue = {};
+      const applyFsrs = function (ids, status) {
+        ids.forEach(function (id) {
+          try { nextDue[id] = fsrsReview(id, status, new Date(ts)); } catch (e) { /* 单点失败不影响整体 */ }
+        });
+      };
+      applyFsrs(sum.mastered, 'mastered');
+      applyFsrs(sum.shaky, 'shaky');
+      applyFsrs(sum.weak, 'weak');
+      localStorage.setItem('cnmDiagnose.nextDue.v1', JSON.stringify(nextDue));
       const hist = JSON.parse(localStorage.getItem('cnmDiagnose.history.v1') || '[]');
       const entry = {
         t: ts, label: sessionMeta.label, targets: session.targets.slice(),
