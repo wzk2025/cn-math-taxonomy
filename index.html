@@ -94,6 +94,27 @@
     .mst.b-weak { background:#3b1414; color:#fca5a5; }
   }
   @media (max-width:760px){ #app{flex-direction:column;} #side{width:100%;height:42%;} }
+
+  /* ---------- 图解（概念示意图） ---------- */
+  .fig-card { max-width:900px; }
+  .figbox svg { width:100%; max-width:600px; height:auto; display:block; margin:0 auto; }
+  .figbox text { fill:var(--text); font-size:14px; font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif; }
+  .figbox .txm { fill:var(--muted); font-size:12.5px; }
+  .figbox .big { font-size:20px; }
+  .figbox .ln { stroke:var(--text); stroke-width:1.7; fill:none; stroke-linecap:round; }
+  .figbox .ac { stroke:var(--accent); stroke-width:2.2; fill:none; stroke-linecap:round; }
+  .figbox .mt { stroke:var(--muted); stroke-width:1.3; fill:none; }
+  .figbox .c2 { stroke:#059669; stroke-width:2.2; fill:none; }
+  .figbox .c3 { stroke:#d97706; stroke-width:2.2; fill:none; }
+  .figbox .dash { stroke-dasharray:6 5; }
+  .figbox .fw { fill:var(--panel); stroke:var(--text); stroke-width:1.7; }
+  .figbox .fa { fill:rgba(37,99,235,.14); stroke:var(--accent); stroke-width:1.7; }
+  .figbox .fa2 { fill:rgba(5,150,105,.16); stroke:#059669; stroke-width:1.7; }
+  .figbox .fa3 { fill:rgba(217,119,6,.18); stroke:#d97706; stroke-width:1.7; }
+  .figbox .fgf { fill:var(--text); stroke:none; }
+  .figbox .faf { fill:var(--accent); stroke:none; }
+  .figbox .fbar { fill:rgba(37,99,235,.35); stroke:var(--accent); }
+  .fig-note { color:var(--muted); font-size:13px; margin:8px 0 0; }
 </style>
 </head>
 <body>
@@ -129,6 +150,7 @@
 </div>
 
 <script src="diagnose/vendor/fsrs.umd.js"></script>
+<script src="diagnose/figures.js"></script>
 <script>
 "use strict";
 const TYPE_ZH = {conceptual:"概念理解", procedural:"程序性技能", reasoning:"推理证明", application:"应用", modeling:"建模"};
@@ -320,6 +342,17 @@ function renderDetail(t) {
       el("a", {class:"diag-link", style:"border:1px solid var(--line); border-radius:6px; padding:3px 10px; background:var(--accent); color:#fff; text-decoration:none;",
               href:"diagnose/?target=" + encodeURIComponent(t.id), text:"诊断这个知识点 →"})) : null);
   const parts = [head];
+  { // 图解：该概念若配有示意图则展示
+    const F = window.CnmFigures;
+    const fig = F && F.forTopic(t);
+    if (fig) {
+      const box = el("div", {class:"card fig-card"}, el("h2", {text:"图解 · " + fig.title}));
+      const holder = el("div", {class:"figbox"});
+      holder.innerHTML = fig.svg + (fig.note ? '<p class="fig-note">' + fig.note + '</p>' : '');
+      box.append(holder);
+      parts.push(box);
+    }
+  }
   if (!t.external) {
     parts.push(el("div", {class:"card"}, el("h2", {text:"掌握标准"}),
       el("ul", {class:"plain"}, t.mastery_criteria.map(c => el("li", {text:c})))));

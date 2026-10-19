@@ -367,10 +367,26 @@
     return q.answer;
   }
 
-  function feedbackBlock(q) {
+  /* 图解：该知识点若配有概念示意图，折一张卡片（open=true 时默认展开） */
+  function figureBlock(t, open) {
+    const F = window.CnmFigures;
+    if (!F) return null;
+    let fig = null;
+    try { fig = F.forTopic(t); } catch (e) { return null; }
+    if (!fig) return null;
+    const wrap = h('details', { class: 'figure-card', open: !!open },
+      h('summary', null, '🖼 图解 · ' + fig.title),
+      h('div', { class: 'figure-body' }));
+    wrap.querySelector('.figure-body').innerHTML = fig.svg + (fig.note ? '<p class="fig-note">' + fig.note + '</p>' : '');
+    return wrap;
+  }
+
+  function feedbackBlock(q, t, open) {
+    const fig = t ? figureBlock(t, open) : null;
     return h('div', { class: 'feedback' },
       h('div', { class: 'refans' }, h('b', null, '参考答案：'), mathNodes(answerText(q))),
-      q.explanation ? h('div', { class: 'explain', id: 'explain' }, h('b', null, '解析：'), mathNodes(q.explanation)) : null);
+      q.explanation ? h('div', { class: 'explain', id: 'explain' }, h('b', null, '解析：'), mathNodes(q.explanation)) : null,
+      fig);
   }
 
   function renderQuestion(item) {
@@ -426,7 +442,7 @@
       card.append(
         h('div', { class: 'muted' }, '你的答案：' + (q.type === 'choice' ? answerOfKey(q, ui.answer) : ui.answer)),
         h('div', { class: 'verdict ' + (ok ? 'ok' : 'no') }, ok ? '自动判定：正确' : '自动判定：不正确'),
-        feedbackBlock(q),
+        feedbackBlock(q, t, !ok),
         h('div', { class: 'row' },
           h('button', { class: 'primary', id: 'btn-next', onclick: function () { commit(ok ? 'correct' : 'wrong'); } }, '下一题'),
           h('button', { id: 'btn-flip', onclick: function () { commit(ok ? 'wrong' : 'correct'); } }, ok ? '判错了，我其实没做对' : '判错了，我其实做对了'),
@@ -434,14 +450,14 @@
     } else if (ui.phase === 'skip') {
       card.append(
         h('div', { class: 'muted' }, '你选择了「不会」。看一下答案和解析再继续：'),
-        feedbackBlock(q),
+        feedbackBlock(q, t, true),
         h('div', { class: 'row' }, h('button', { class: 'primary', id: 'btn-next', onclick: function () { commit('skip'); } }, '下一题')));
     } else {
       card.append(
         ui.answer ? h('div', { class: 'muted' }, '你的答案：' + ui.answer) : null,
         q.type === 'self' ? h('div', { class: 'muted' }, '开放题：请对照参考答案自己判断。')
           : (ui.verdict ? h('div', { class: 'muted' }, '这道题的答案无法被自动可靠地判定，请对照参考答案自己判断。') : null),
-        feedbackBlock(q),
+        feedbackBlock(q, t, false),
         h('div', { class: 'row' },
           h('button', { class: 'good', id: 'btn-right', onclick: function () { commit('correct'); } }, '对（我做对了）'),
           h('button', { class: 'bad', id: 'btn-wrong', onclick: function () { commit('wrong'); } }, '不对'),
@@ -490,6 +506,7 @@
     const body = h('div', { class: 'body' });
     body.append(h('div', { class: 'muted' }, (t.external ? '小学先修知识点（无诊断题）' : t.chapter) + (t.domain ? ' · ' + t.domain : '')));
     body.append(h('div', { text: t.description }));
+    body.append(figureBlock(t, false));
     if (t.mastery_criteria && t.mastery_criteria.length) {
       body.append(h('div', null, h('b', null, '掌握标准：'), h('ul', null, t.mastery_criteria.map(function (m) { return h('li', { text: m }); }))));
     }

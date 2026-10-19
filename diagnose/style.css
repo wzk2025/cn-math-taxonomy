@@ -166,3 +166,29 @@ svg.graph .n.shaky rect.body { fill: #fef3c7; stroke: #d97706; }
   .legend i.s { background: var(--warn-bg); }
   svg.graph .n.unknown rect.body { fill: var(--unk-bg); }
 }
+
+/* ---------- 图解（概念示意图） ---------- */
+.figure-card, .fig-card { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); margin-top: 10px; }
+.figure-card { overflow: hidden; }
+.figure-card > summary { cursor: pointer; padding: 8px 12px; font-weight: 600; color: var(--accent); user-select: none; }
+.figure-card[open] > summary { border-bottom: 1px dashed var(--line); }
+.figure-body, .figbox { padding: 10px 12px 12px; }
+.fig-card .figbox { padding: 0; }
+.figbox svg, .figure-body svg { width: 100%; max-width: 600px; height: auto; display: block; margin: 0 auto; }
+.figbox text, .figure-body text { fill: var(--text); font-size: 14px; font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+.figbox .txm, .figure-body .txm { fill: var(--muted); font-size: 12.5px; }
+.figbox .big, .figure-body .big { font-size: 20px; }
+.figbox .ln, .figure-body .ln { stroke: var(--text); stroke-width: 1.7; fill: none; stroke-linecap: round; }
+.figbox .ac, .figure-body .ac { stroke: var(--accent); stroke-width: 2.2; fill: none; stroke-linecap: round; }
+.figbox .mt, .figure-body .mt { stroke: var(--muted); stroke-width: 1.3; fill: none; }
+.figbox .c2, .figure-body .c2 { stroke: #059669; stroke-width: 2.2; fill: none; }
+.figbox .c3, .figure-body .c3 { stroke: #d97706; stroke-width: 2.2; fill: none; }
+.figbox .dash, .figure-body .dash { stroke-dasharray: 6 5; }
+.figbox .fw, .figure-body .fw { fill: var(--panel); stroke: var(--text); stroke-width: 1.7; }
+.figbox .fa, .figure-body .fa { fill: rgba(37, 99, 235, .14); stroke: var(--accent); stroke-width: 1.7; }
+.figbox .fa2, .figure-body .fa2 { fill: rgba(5, 150, 105, .16); stroke: #059669; stroke-width: 1.7; }
+.figbox .fa3, .figure-body .fa3 { fill: rgba(217, 119, 6, .18); stroke: #d97706; stroke-width: 1.7; }
+.figbox .fgf, .figure-body .fgf { fill: var(--text); stroke: none; }
+.figbox .faf, .figure-body .faf { fill: var(--accent); stroke: none; }
+.figbox .fbar, .figure-body .fbar { fill: rgba(37, 99, 235, .35); stroke: var(--accent); }
+.fig-note { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
