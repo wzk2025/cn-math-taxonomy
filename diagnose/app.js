@@ -381,12 +381,28 @@
     return wrap;
   }
 
+  /* 通俗讲解：生活化类比 + 口诀 + 易错点 + 例题（本期为核心概念编写，未覆盖的主题返回 null） */
+  function explainBlock(t, open) {
+    const E = window.CnmExplain;
+    if (!E) return null;
+    let e = null;
+    try { e = E.forTopic(t); } catch (err) { return null; }
+    if (!e) return null;
+    const wrap = h('details', { class: 'explain-card', open: !!open },
+      h('summary', null, '👨‍🏫 通俗讲解 · ' + e.title),
+      h('div', { class: 'explain-body' }));
+    wrap.querySelector('.explain-body').innerHTML = e.html;
+    return wrap;
+  }
+
   function feedbackBlock(q, t, open) {
     const fig = t ? figureBlock(t, open) : null;
+    const ex = t ? explainBlock(t, open) : null;
     return h('div', { class: 'feedback' },
       h('div', { class: 'refans' }, h('b', null, '参考答案：'), mathNodes(answerText(q))),
       q.explanation ? h('div', { class: 'explain', id: 'explain' }, h('b', null, '解析：'), mathNodes(q.explanation)) : null,
-      fig);
+      fig,
+      ex);
   }
 
   function renderQuestion(item) {
@@ -507,6 +523,7 @@
     body.append(h('div', { class: 'muted' }, (t.external ? '小学先修知识点（无诊断题）' : t.chapter) + (t.domain ? ' · ' + t.domain : '')));
     body.append(h('div', { text: t.description }));
     body.append(figureBlock(t, false));
+    body.append(explainBlock(t, true));
     if (t.mastery_criteria && t.mastery_criteria.length) {
       body.append(h('div', null, h('b', null, '掌握标准：'), h('ul', null, t.mastery_criteria.map(function (m) { return h('li', { text: m }); }))));
     }

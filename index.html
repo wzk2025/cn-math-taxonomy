@@ -119,6 +119,15 @@
   .figbox .faf { fill:var(--accent); stroke:none; }
   .figbox .fbar { fill:rgba(37,99,235,.35); stroke:var(--accent); }
   .fig-note { color:var(--muted); font-size:13px; margin:8px 0 0; }
+  /* 通俗讲解 */
+  .explain-body { font-size:14px; line-height:1.7; }
+  .explain-body .talk { margin:0 0 8px; }
+  .explain-body .mem { background:rgba(37,99,235,.10); border-left:3px solid var(--accent); padding:6px 10px; border-radius:4px; margin:8px 0; }
+  .explain-body .pits { margin:6px 0; padding-left:20px; }
+  .explain-body .pits li { color:#b45309; margin:3px 0; }
+  .explain-body .ex { background:rgba(37,99,235,.06); border-radius:6px; padding:8px 12px; margin-top:8px; }
+  .explain-body .ex ol { margin:4px 0 0; padding-left:22px; }
+  .explain-body .ex li { margin:3px 0; }
 </style>
 </head>
 <body>
@@ -155,6 +164,7 @@
 
 <script src="diagnose/vendor/fsrs.umd.js"></script>
 <script src="diagnose/figures.js"></script>
+<script src="diagnose/explain.js"></script>
 <script>
 "use strict";
 const TYPE_ZH = {conceptual:"概念理解", procedural:"程序性技能", reasoning:"推理证明", application:"应用", modeling:"建模"};
@@ -353,6 +363,17 @@ function renderDetail(t) {
       const box = el("div", {class:"card fig-card"}, el("h2", {text:"图解 · " + fig.title}));
       const holder = el("div", {class:"figbox"});
       holder.innerHTML = fig.svg + (fig.note ? '<p class="fig-note">' + fig.note + '</p>' : '');
+      box.append(holder);
+      parts.push(box);
+    }
+  }
+  { // 通俗讲解：生活化类比 + 口诀 + 易错点 + 例题
+    const E2 = window.CnmExplain;
+    const ee = E2 && E2.forTopic(t);
+    if (ee) {
+      const box = el("div", {class:"card explain-card"}, el("h2", {text:"通俗讲解 · " + ee.title}));
+      const holder = el("div", {class:"explain-body"});
+      holder.innerHTML = ee.html;
       box.append(holder);
       parts.push(box);
     }

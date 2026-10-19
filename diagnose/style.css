@@ -196,3 +196,16 @@ svg.graph .n.shaky rect.body { fill: #fef3c7; stroke: #d97706; }
 .figbox .faf, .figure-body .faf { fill: var(--accent); stroke: none; }
 .figbox .fbar, .figure-body .fbar { fill: rgba(37, 99, 235, .35); stroke: var(--accent); }
 .fig-note { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+
+/* ---------- 通俗讲解 ---------- */
+.explain-card, .ex-card { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); margin-top: 10px; overflow: hidden; }
+.explain-card > summary { cursor: pointer; padding: 8px 12px; font-weight: 600; color: var(--accent); user-select: none; }
+.explain-card[open] > summary { border-bottom: 1px dashed var(--line); }
+.explain-body { padding: 10px 12px; font-size: 14px; line-height: 1.7; }
+.explain-body .talk { margin: 0 0 8px; }
+.explain-body .mem { background: rgba(37, 99, 235, .10); border-left: 3px solid var(--accent); padding: 6px 10px; border-radius: 4px; margin: 8px 0; }
+.explain-body .pits { margin: 6px 0; padding-left: 20px; }
+.explain-body .pits li { color: #b45309; margin: 3px 0; }
+.explain-body .ex { background: rgba(37, 99, 235, .06); border-radius: 6px; padding: 8px 12px; margin-top: 8px; }
+.explain-body .ex ol { margin: 4px 0 0; padding-left: 22px; }
+.explain-body .ex li { margin: 3px 0; }
