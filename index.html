@@ -62,6 +62,30 @@
   #err code { background:#fee2e2; padding:1px 4px; border-radius:4px; }
   .empty { color:var(--muted); padding:40px 0; }
   .muted { color:var(--muted); }
+  #list li.item.kbd { background:#f1f5f9; }
+  #list li.item.kbd.sel { background:#e8f0fe; }
+  mark { background:#fef08a; color:inherit; border-radius:2px; padding:0 1px; }
+  :root { color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f172a; --panel:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8; --accent:#60a5fa;
+            --hard:#f97316; --soft:#94a3b8; --ext:#c4b5fd; }
+    header { background:#0b1220; }
+    header .tool-link { background:#2563eb; }
+    #filters input, #filters select, .toolbar button, .chip { background:var(--panel); color:var(--text); border-color:var(--line); }
+    #filters select { background-image:none; }
+    #list .grp { background:#1a2436; color:#cbd5e1; border-color:var(--line); }
+    #list li.item { border-color:#26334d; }
+    #list li.item:hover { background:#243147; }
+    #list li.item.kbd { background:#26334d; }
+    #list li.item.sel, #list li.item.kbd.sel { background:#1e3a5f; }
+    .q { background:#0f172a; border-color:var(--line); }
+    .tag { background:#26334d; color:#cbd5e1; }
+    .tag.ext { background:#312e81; color:#c4b5fd; }
+    mark { background:#854d0e; color:#fef9c3; }
+    #err { background:#3b1414; color:#fca5a5; border-color:#7f1d1d; }
+    #err code { background:#582222; }
+    a.node { color:var(--accent); }
+  }
   @media (max-width:760px){ #app{flex-direction:column;} #side{width:100%;height:42%;} }
 </style>
 </head>
@@ -144,7 +168,27 @@ async function load() {
   window.addEventListener("hashchange", () => select(location.hash.slice(1), false));
   renderList();
   if (byId.has(location.hash.slice(1))) select(location.hash.slice(1), true);
-  else $("#main").replaceChildren(el("div", {class:"empty", text:"← 请从左侧选择一个知识点。共 " + topics.filter(t => !t.external).length + " 个知识点、" + deps.length + " 条先修边。"}));
+  else renderWelcome();
+}
+
+let visibleIds = [], kbdIndex = -1;
+
+function renderWelcome() {
+  const mains = topics.filter(t => !t.external);
+  const grades = new Set(mains.map(t => t.grade + t.semester));
+  const first = mains[0];
+  $("#main").replaceChildren(el("div", {class:"card"},
+    el("h1", {class:"title", text:"中国初中数学知识图谱"}),
+    el("p", {text:"从左侧选择知识点，查看它的先修链与后续依赖；也可以直接从这里开始。"}),
+    el("div", {class:"tags"},
+      el("span", {class:"tag", text:mains.length + " 个知识点"}),
+      el("span", {class:"tag", text:deps.length + " 条先修关系"}),
+      el("span", {class:"tag", text:grades.size + " 册教材"})),
+    el("div", {class:"toolbar", style:"margin-top:10px"},
+      first ? el("button", {text:"从头开始浏览", onclick:() => select(first.id, true)}) : null,
+      el("button", {text:"随机抽一个知识点", onclick:() => select(mains[Math.floor(Math.random() * mains.length)].id, true)}),
+      el("a", {class:"node", style:"border:1px solid var(--line); border-radius:6px; padding:3px 10px; background:var(--accent); color:#fff;",
+              href:"diagnose/", text:"打开诊断小工具 →"}))));
 }
 
 function filtered() {
@@ -160,8 +204,16 @@ function filtered() {
   });
 }
 
+function hi(name, q) {
+  if (!q) return [name];
+  const i = name.toLowerCase().indexOf(q);
+  if (i < 0) return [name];
+  return [name.slice(0, i), el("mark", {text:name.slice(i, i + q.length)}), name.slice(i + q.length)];
+}
+
 function renderList() {
   const items = filtered(), ul = $("#list");
+  const q = $("#q").value.trim().toLowerCase();
   ul.replaceChildren();
   let last = null;
   for (const t of items) {
@@ -171,21 +223,52 @@ function renderList() {
       ul.append(el("li", {class:"grp", text: t.external ? "小学先修（外部节点）" : GRADE_ZH[t.grade] + "年级" + t.semester + "册"}));
     }
     const li = el("li", {class:"item" + (t.id === selected ? " sel" : ""), "data-id":t.id, onclick:() => select(t.id, true)},
-      el("span", {class:"nm", text:t.name}),
+      el("span", {class:"nm"}, ...hi(t.name, q)),
       el("span", {class:"meta", text: t.external ? t.domain : t.domain + " · " + (t.chapter || "").replace(/^.. /, "")}));
     ul.append(li);
   }
+  visibleIds = items.map(t => t.id);
+  kbdIndex = selected ? visibleIds.indexOf(selected) : -1;
   $("#count").textContent = "显示 " + items.length + " / " + topics.length;
 }
+
+/* 键盘导航：↑↓ 在列表中移动、回车选中、搜索框内回车选第一个结果、ESC 清空搜索 */
+document.addEventListener("keydown", e => {
+  const tag = (e.target.tagName || "").toLowerCase();
+  if (e.key === "Escape" && tag === "input") {
+    if (e.target.id === "q") { e.target.value = ""; renderList(); e.target.blur(); }
+    return;
+  }
+  if (e.key === "Enter" && e.target.id === "q") {
+    const id = visibleIds[Math.max(kbdIndex, 0)];
+    if (id) select(id, true);
+    return;
+  }
+  if (tag === "input" || tag === "select" || tag === "textarea" || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    if (!visibleIds.length) return;
+    e.preventDefault();
+    kbdIndex = e.key === "ArrowDown" ? Math.min(kbdIndex + 1, visibleIds.length - 1) : Math.max(kbdIndex - 1, 0);
+    for (const li of document.querySelectorAll("#list li.item"))
+      li.classList.toggle("kbd", li.dataset.id === visibleIds[kbdIndex]);
+    const cur = document.querySelector("#list li.item.kbd");
+    if (cur) cur.scrollIntoView({block:"nearest"});
+  } else if (e.key === "Enter") {
+    if (kbdIndex >= 0 && visibleIds[kbdIndex]) select(visibleIds[kbdIndex], true);
+  }
+});
 
 function select(id, push) {
   if (!byId.has(id)) return;
   selected = id;
-  if (push && location.hash.slice(1) !== id) history.replaceState(null, "", "#" + id);
+  if (push && location.hash.slice(1) !== id) history.pushState(null, "", "#" + id);
   for (const li of document.querySelectorAll("#list li.item")) li.classList.toggle("sel", li.dataset.id === id);
   const cur = document.querySelector("#list li.sel"); if (cur) cur.scrollIntoView({block:"nearest"});
   renderDetail(byId.get(id));
   $("#main").scrollTop = 0;
+  // 移动端：详情在侧栏下方，选中后把详情滚进视口
+  if (window.matchMedia("(max-width:760px)").matches && navigator.maxTouchPoints > 0)
+    $("#main").scrollIntoView({behavior:"smooth", block:"start"});
 }
 
 const link = id => el("a", {class:"node", onclick:() => select(id, true), text:byId.get(id).name});
@@ -226,8 +309,8 @@ function prereqCard(t) {
     return card;
   }
   const bar = el("div", {class:"toolbar"},
-    el("button", {class:viewMode === "tree" ? "on" : "", text:"树状", onclick:() => { viewMode = "tree"; renderDetail(t); }}),
-    el("button", {class:viewMode === "layer" ? "on" : "", text:"分层列表", onclick:() => { viewMode = "layer"; renderDetail(t); }}),
+    el("button", {class:viewMode === "tree" ? "on" : "", text:"树状", onclick:() => { viewMode = "tree"; const sc = $("#main").scrollTop; renderDetail(t); $("#main").scrollTop = sc; }}),
+    el("button", {class:viewMode === "layer" ? "on" : "", text:"分层列表", onclick:() => { viewMode = "layer"; const sc = $("#main").scrollTop; renderDetail(t); $("#main").scrollTop = sc; }}),
     el("span", {class:"muted", text:"直接先修 " + direct.length + " 个，累计上游 " + all.size + " 个知识点。树状图中同一知识点只在首次出现处展开。"}));
   card.append(bar, body);
   if (viewMode === "tree") body.append(tree(t.id));

@@ -122,3 +122,47 @@ textarea.ans-input { font: inherit; font-size: 15px; padding: 8px 10px; border: 
 .stat.shaky { background: #fef3c7; }
 svg.graph .n.shaky rect.body { fill: #fef3c7; stroke: #d97706; }
 .legend i.s { background: #fef3c7; border-color: #d97706; }
+
+/* 深色模式（跟随系统） */
+:root { color-scheme: light dark; }
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f172a; --panel: #1e293b; --line: #334155; --text: #e2e8f0; --muted: #94a3b8; --accent: #60a5fa;
+    --ok: #4ade80; --ok-bg: #143524; --bad: #f87171; --bad-bg: #3b1414; --unk: #94a3b8; --unk-bg: #1e293b;
+    --warn-bg: #3a2e10; --warn: #fbbf24;
+  }
+  .topbar { background: #0b1220; }
+  button, .btn, input[type=text], input[type=search], input[type=number], select, textarea.ans-input {
+    background: var(--panel); color: var(--text); border-color: var(--line);
+  }
+  button:hover { background: #26334d; }
+  button.primary { background: #2563eb; border-color: #2563eb; }
+  button.primary:hover { background: #3b82f6; }
+  .banner { background: #1e3a5f; border-color: #2563eb; }
+  .vol > summary { background: #26334d; }
+  .topic-row { border-color: #26334d; }
+  .progress { background: #334155; }
+  .q-text { background: #0f172a; }
+  .refans { background: #12291a; border-color: var(--ok); }
+  .explain { background: #172554; border-color: #2563eb; }
+  .verdict.ok { background: var(--ok-bg); color: #86efac; }
+  .verdict.no { background: var(--bad-bg); color: #fca5a5; }
+  .tag { background: #26334d; color: #cbd5e1; }
+  .tag.weak { background: var(--bad-bg); color: #fca5a5; }
+  .tag.mastered { background: var(--ok-bg); color: #86efac; }
+  .tag.shaky { background: var(--warn-bg); color: #fcd34d; }
+  .tag.diff-basic { background: var(--ok-bg); color: #86efac; }
+  .tag.diff-standard { background: #172554; color: #93c5fd; }
+  .tag.diff-advanced { background: #4a1942; color: #f0abfc; }
+  .stat.shaky { background: var(--warn-bg); }
+  .std { background: #0f172a; }
+  .std code { color: #cbd5e1; }
+  ol.path > li::before { background: #475569; }
+  .choices button.picked { background: #1e3a5f; box-shadow: 0 0 0 2px #2563eb; }
+  .svgwrap { background: var(--panel); }
+  .legend i.t { background: var(--panel); }
+  svg.graph text { fill: #e2e8f0; }
+  svg.graph .n.shaky rect.body { fill: var(--warn-bg); }
+  .legend i.s { background: var(--warn-bg); }
+  svg.graph .n.unknown rect.body { fill: var(--unk-bg); }
+}
