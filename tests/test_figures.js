@@ -9,7 +9,7 @@ let pass = 0, fail = 0;
 function t(ok, msg) { if (ok) { pass++; console.log('  ok   ' + msg); } else { fail++; console.log('  FAIL ' + msg); } }
 
 /* 1. 基础 API */
-t(F.count >= 28, '图集数量 ≥ 28（实际 ' + F.count + '）');
+t(F.count >= 55, '图集数量 ≥ 55（实际 ' + F.count + '）');
 t(F.forTopic(null) === null && F.forTopic({}) === null, '空入参返回 null');
 t(F.forTopic({ name: '不存在的概念xyz' }) === null, '无关主题返回 null');
 
@@ -50,7 +50,7 @@ t(/销售与利润/.test(titleOf('销售与利润问题')), '销售利润 → �
 t(/分段计费/.test(titleOf('分段计费与方案选择')), '分段计费 → 阶梯折线图');
 t(/行程问题/.test(titleOf('一次函数的图象与画法')) === false, '一次函数不误中行程图（行程规则不再抢先）');
 t(/扇形统计图/.test(titleOf('统计表、统计图与平均数')) || /扇形|条形/.test(titleOf('统计表、统计图与平均数')), '统计表主题仍出统计图');
-t(F.count >= 34, '图集数量 ≥ 34（实际 ' + F.count + '）');
+t(F.count >= 55, '图集数量 ≥ 55（实际 ' + F.count + '）');
 t(titleOf('抛物线的开口方向与对称轴') !== '', '抛物线主题可出图');
 
 console.log(fail === 0 ? '全部通过：' + pass + ' 项' : '失败 ' + fail + ' / ' + (pass + fail));

@@ -18,6 +18,11 @@ const g7 = topics.filter(x => x.grade === 7 && x.semester === '上');
 const missing = g7.filter(x => !E.forTopic(x)).map(x => x.name);
 t(missing.length === 0, '七上 ' + g7.length + ' 个知识点全部有讲解（缺：' + missing.join('、') + '）');
 
+/* 全部年级（外部小学节点除外）都应有讲解 */
+const all = topics.filter(x => !x.external);
+const missAll = all.filter(x => !E.forTopic(x)).map(x => x.grade + x.semester + ' ' + x.name);
+t(missAll.length === 0, '全部 ' + all.length + ' 个知识点全部有讲解（缺：' + missAll.join('、') + '）');
+
 /* html 完整性：talk 必有，无 undefined/NaN */
 let bad = [];
 for (const name of ['数轴', '绝对值的概念与几何意义', '去括号法则', '合并同类项', '等式的性质', '移项与合并同类项解方程',
@@ -38,7 +43,7 @@ t(/角平分线/.test(titleOf('角的比较与运算（含角平分线）')), '�
 t(/角的认识|^角/.test(titleOf('角的概念与表示')), '角的表示 → 角的认识');
 
 /* 图解与讲解独立工作 */
-t(F.count >= 41, '图集数量 ≥ 41（实际 ' + F.count + '）');
+t(F.count >= 55, '图集数量 ≥ 55（实际 ' + F.count + '）');
 
 console.log(fail === 0 ? '全部通过：' + pass + ' 项' : '失败 ' + fail + ' / ' + (pass + fail));
 process.exit(fail ? 1 : 0);
