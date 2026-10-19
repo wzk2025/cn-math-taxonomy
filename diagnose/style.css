@@ -38,6 +38,20 @@ input[type=text], input[type=search], input[type=number], select { font: inherit
 .chap-head { display: flex; align-items: center; gap: 8px; padding: 6px 4px 2px; font-weight: 600; border-bottom: 1px solid var(--line); }
 .chap-head .t { flex: 1; }
 .topic-row { display: flex; align-items: center; gap: 8px; padding: 4px 4px; border-bottom: 1px solid #f0f2f4; }
+
+/* 练习卷（按章节打印 A4） */
+.ws-ctl { margin-bottom: 10px; }
+.ws-head { border-bottom: 2px solid var(--text); padding-bottom: 4px; margin-bottom: 4px; }
+.ws-head h2 { margin: 0 0 2px; }
+.ws-who { margin: 2px 0 4px; font-size: 13px; }
+.ws-topic { margin: 14px 0 0; }
+.ws-item { padding: 6px 0 10px; border-bottom: 1px solid #f0f2f4; }
+.ws-q { line-height: 1.75; }
+.ws-choices { margin: 2px 0 4px 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 18px; }
+.ws-blank { border-bottom: 1px dashed #94a3b8; min-height: 2.2em; margin: 8px 4px 0; }
+.ws-blank.tall { min-height: 3.2em; }
+.ws-blank.short { min-height: 1.4em; }
+.ws-answers .ws-ans { padding: 4px 0; border-bottom: 1px dotted var(--line); line-height: 1.7; }
 .topic-row .nm { flex: 1; }
 .topic-row .sec { color: var(--muted); font-size: 12px; }
 .topic-row button, .chap-head button { padding: 1px 10px; font-size: 12px; }
@@ -98,10 +112,16 @@ svg.graph .e.indirect { stroke-dasharray: 5 4; }
 .legend i.u { background: var(--unk-bg); border-color: #94a3b8; border-style: dashed; } .legend i.t { background: #fff; border: 3px solid var(--accent); }
 
 @media print {
+  @page { size: A4 portrait; margin: 14mm 12mm; }
   body { background: #fff; font-size: 12px; }
   .no-print { display: none !important; }
   main { max-width: none; padding: 0; }
   .card { border: 1px solid #bbb; break-inside: avoid-page; box-shadow: none; }
+  /* 练习卷：整卷与答案卡都允许跨页，只按小条目避分页 */
+  .ws-sheet, .ws-answers { break-inside: auto; border: none; padding: 0; }
+  .ws-answers { break-before: page; margin-top: 0; }
+  .ws-item, .ws-ans, .ws-head { break-inside: avoid; }
+  .ws-head h2 { font-size: 17px; text-align: center; }
   details.topic { break-inside: avoid; }
   .svgwrap { overflow: visible; border: none; }
   svg.graph { max-width: 100%; height: auto; }

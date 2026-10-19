@@ -302,7 +302,11 @@
             h('button', {
               class: 'primary', title: '把本章全部 ' + ch.topics.length + ' 个知识点一起作为目标',
               onclick: function () { startSession(ch.topics.map(function (x) { return x.t.id; }), ch.volume + ' ' + ch.label + '（整章）'); }
-            }, '以整章为目标')),
+            }, '以整章为目标'),
+            h('button', {
+              title: '把本章题目排成练习卷，可打印到 A4 纸（文末附参考答案）',
+              onclick: function () { renderWorksheet(ch); }
+            }, '打印 A4 练习卷')),
           c.rows.map(function (x) {
             return h('div', { class: 'topic-row', title: x.t.description },
               h('span', { class: 'nm', text: x.t.name }),
@@ -313,6 +317,109 @@
       box.append(det);
     });
     if (!shown) box.append(h('p', { class: 'muted', text: '没有匹配的知识点。' }));
+  }
+
+  /* ------------------------------------------------------------ 练习卷（按章节打印 A4） */
+  let wsPer = 2;    // 每个知识点出几题（1–3）
+  let wsAns = true; // 打印时是否附参考答案页
+
+  // FNV-1a 字符串哈希 + mulberry32：确定性伪随机，同一个种子稳定选出同一批题（可复现/分享）
+  function hashStr(str) {
+    let x = 2166136261;
+    for (let i = 0; i < str.length; i++) { x ^= str.charCodeAt(i); x = Math.imul(x, 16777619); }
+    return x >>> 0;
+  }
+  function rngFor(seedStr) {
+    let a = hashStr(seedStr);
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // 按章节内知识点顺序分组选题；每个知识点独立洗牌取前 N 题；跳过自评题（不适合纸质卷）
+  function pickWorksheetQuestions(ch, per, seed) {
+    const groups = [];
+    let total = 0;
+    ch.topics.forEach(function (x) {
+      const bank = (D.graph.bank[x.t.id] || []).filter(function (q) { return q.type !== 'self'; });
+      if (!bank.length) return;
+      const rand = rngFor(seed + '|' + x.t.id);
+      const idx = bank.map(function (_, i) { return i; });
+      for (let i = idx.length - 1; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        const tmp = idx[i]; idx[i] = idx[j]; idx[j] = tmp;
+      }
+      const picked = idx.slice(0, Math.min(per, bank.length)).map(function (i) { return bank[i]; });
+      groups.push({ topic: x.t, questions: picked });
+      total += picked.length;
+    });
+    return { groups: groups, total: total };
+  }
+
+  function wsItem(num, q) {
+    const body = h('div', { class: 'ws-item' },
+      h('div', { class: 'ws-q' }, h('b', { text: num + '.' }), ' ', mathNodes(q.prompt)));
+    if (q.type === 'choice') {
+      const wrap = h('div', { class: 'ws-choices' });
+      (q.choices || []).forEach(function (c) { wrap.append(h('div', null, h('b', { text: c.key + '.' }), ' ', mathNodes(c.text))); });
+      body.append(wrap, h('div', { class: 'ws-blank short', text: '答：' }));
+    } else {
+      body.append(h('div', { class: 'ws-blank' }), h('div', { class: 'ws-blank tall' }));
+    }
+    return body;
+  }
+
+  function renderWorksheet(ch, seed) {
+    seed = seed || Math.random().toString(36).slice(2, 10);
+    const built = pickWorksheetQuestions(ch, wsPer, seed);
+    let num = 0;
+    const qBlocks = [];
+    const ansRows = [];
+    built.groups.forEach(function (g) {
+      qBlocks.push(h('div', { class: 'ws-topic muted small' }, '【' + g.topic.name + '】'));
+      g.questions.forEach(function (q) {
+        num++;
+        qBlocks.push(wsItem(num, q));
+        ansRows.push(h('div', { class: 'ws-ans' },
+          h('b', { text: num + '.' }), ' ', mathNodes(answerText(q)),
+          q.explanation ? h('span', { class: 'muted small' }, '　—— ', mathNodes(q.explanation)) : null));
+      });
+    });
+
+    const perSel = h('select', { onchange: function () {
+      const v = parseInt(perSel.value, 10);
+      if (v >= 1 && v <= 3) wsPer = v;
+      renderWorksheet(ch, seed);
+    } }, [1, 2, 3].map(function (n) { return h('option', { value: String(n), selected: n === wsPer }, '每个知识点 ' + n + ' 题'); }));
+    const ansCb = h('input', { type: 'checkbox', checked: wsAns, onchange: function () {
+      wsAns = ansCb.checked;
+      ansCard.classList.toggle('no-print', !wsAns);
+    } });
+
+    const ansCard = h('details', { class: 'card ws-answers', open: true },
+      h('summary', null, h('b', { text: '参考答案（共 ' + built.total + ' 题，打印时单独成页）' })),
+      h('p', { class: 'muted small' }, '自动判题与解析为 AI 生成草稿，建议家长对照解析批改。'),
+      ansRows);
+
+    const page = h('div', null,
+      h('div', { class: 'row no-print ws-ctl' },
+        h('button', { onclick: function () { renderStart(); } }, '← 返回'),
+        h('b', { text: ch.volume + ' · ' + ch.label }),
+        perSel,
+        h('button', { onclick: function () { renderWorksheet(ch, Math.random().toString(36).slice(2, 10)); } }, '换一批题'),
+        h('label', { class: 'small' }, ansCb, ' 卷末附答案'),
+        h('button', { class: 'primary', onclick: function () { window.print(); } }, '打印 / 另存为 PDF')),
+      h('div', { class: 'card ws-sheet' },
+        h('div', { class: 'ws-head' },
+          h('h2', { text: ch.volume + ' · ' + ch.label + ' 练习卷' }),
+          h('p', { class: 'ws-who' }, '班级：__________　姓名：__________　日期：__________'),
+          h('p', { class: 'muted small no-print' }, '共 ' + built.total + ' 题 · 生成于 ' + new Date().toLocaleString('zh-CN') + ' · 选题种子 ' + seed)),
+        built.total ? qBlocks : h('p', { class: 'muted' }, '本章没有可打印的练习题。')),
+      built.total ? ansCard : null);
+    show(page);
   }
 
   /* ------------------------------------------------------------ 出题页 */
@@ -925,6 +1032,17 @@
       return;
     }
     const params = new URLSearchParams(location.search);
+    // ?worksheet=章节key（如 “七上 第三章”）：直接打开该章的可打印练习卷
+    const wsKey = params.get('worksheet');
+    if (wsKey) {
+      let hit = null;
+      VOLUMES.forEach(function (vv) {
+        ((D.tree[vv[0]] || {}).chapters || []).forEach(function (ch) { if (ch.key === wsKey.trim()) hit = ch; });
+      });
+      if (!hit) { renderStart('URL 参数 worksheet 没有匹配的章节：' + wsKey + '（格式如 “七上 第三章”）'); return; }
+      renderWorksheet(hit, params.get('wsseed') || undefined);
+      return;
+    }
     let resolved = null;
     try { resolved = resolveTargets(params); } catch (e) { renderStart(e.message); return; }
     if (params.get('seed')) seedParam = params.get('seed');
