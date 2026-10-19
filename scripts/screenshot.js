@@ -141,7 +141,7 @@ async function main() {
     const rows = await evalJs('document.querySelectorAll("#target-list .topic-row").length');
     check(rows > 100, '开始页渲染了知识点列表（' + rows + ' 行）');
     check(await exists('.chap-head button.primary'), '有「以整章为目标」按钮');
-    check(await evalJs('document.querySelector("a.back").getAttribute("href")') === '../index.html', '有返回知识图谱的链接');
+    check(await evalJs('Array.from(document.querySelectorAll("a.back")).some(a => a.getAttribute("href") === "../index.html")'), '有返回知识图谱的链接');
 
     // 搜索并选目标
     await evalJs('(() => { const s = document.getElementById("search"); s.value = "配方法"; s.dispatchEvent(new Event("input", {bubbles:true})); })()');

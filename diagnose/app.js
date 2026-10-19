@@ -531,7 +531,11 @@
     } catch (e) { return null; }
   }
 
-  /* 把最新一次诊断的掌握状态写入共享 localStorage，图谱页会读取并显示徽章 */
+  /* 把最新一次诊断的结果写入共享 localStorage：
+   * - mastered.v1：最近一次的汇总（开始页复习提示用）
+   * - topicStatus.v1：按知识点合并的状态表（本次测到的点覆盖旧状态），学习画像页用
+   * - history.v1：诊断历史（近邻去重：结果页更正答案重渲染时只更新最后一条）
+   */
   function publishMastery() {
     try {
       const sum = E.summarize(D.graph, session);
@@ -539,6 +543,25 @@
         mastered: sum.mastered, shaky: sum.shaky, weak: sum.weak,
         updatedAt: new Date().toISOString(), label: sessionMeta.label
       }));
+      const ts = Date.now();
+      const st = JSON.parse(localStorage.getItem('cnmDiagnose.topicStatus.v1') || '{}');
+      sum.mastered.forEach(function (id) { st[id] = { s: 'mastered', t: ts }; });
+      sum.shaky.forEach(function (id) { st[id] = { s: 'shaky', t: ts }; });
+      sum.weak.forEach(function (id) { st[id] = { s: 'weak', t: ts }; });
+      localStorage.setItem('cnmDiagnose.topicStatus.v1', JSON.stringify(st));
+      const hist = JSON.parse(localStorage.getItem('cnmDiagnose.history.v1') || '[]');
+      const entry = {
+        t: ts, label: sessionMeta.label, targets: session.targets.slice(),
+        asked: sum.asked, limit: session.limit,
+        weak: sum.weak, shaky: sum.shaky,
+        masteredCount: sum.mastered.length, untestedCount: sum.untested.length,
+        limitReached: !!sum.limitReached
+      };
+      const last = hist[hist.length - 1];
+      if (last && last.label === entry.label && last.asked === entry.asked) hist[hist.length - 1] = entry;
+      else hist.push(entry);
+      while (hist.length > 200) hist.shift();
+      localStorage.setItem('cnmDiagnose.history.v1', JSON.stringify(hist));
     } catch (e) { /* ignore */ }
   }
 
