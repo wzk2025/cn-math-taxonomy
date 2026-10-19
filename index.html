@@ -50,6 +50,10 @@
   a.node { color:var(--accent); cursor:pointer; text-decoration:none; }
   a.node:hover { text-decoration:underline; }
   .seen { color:var(--muted); font-size:12px; }
+  .mst { font-size:11px; padding:0 6px; border-radius:8px; margin-left:4px; vertical-align:1px; white-space:nowrap; }
+  .mst.b-ok { background:#dcfce7; color:#166534; }
+  .mst.b-shaky { background:#fef3c7; color:#92400e; }
+  .mst.b-weak { background:#fee2e2; color:#991b1b; }
   .toolbar { display:flex; gap:8px; margin-bottom:8px; align-items:center; flex-wrap:wrap; }
   .toolbar button { border:1px solid var(--line); background:#fff; border-radius:6px; padding:3px 10px; cursor:pointer; font:inherit; }
   .toolbar button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
@@ -85,6 +89,9 @@
     #err { background:#3b1414; color:#fca5a5; border-color:#7f1d1d; }
     #err code { background:#582222; }
     a.node { color:var(--accent); }
+    .mst.b-ok { background:#143524; color:#86efac; }
+    .mst.b-shaky { background:#3a2e10; color:#fcd34d; }
+    .mst.b-weak { background:#3b1414; color:#fca5a5; }
   }
   @media (max-width:760px){ #app{flex-direction:column;} #side{width:100%;height:42%;} }
 </style>
@@ -137,6 +144,25 @@ const el = (tag, attrs, ...kids) => {
 
 let topics = [], deps = [], byId = new Map(), pre = new Map(), post = new Map(), selected = null;
 
+/* 与诊断小工具共享的掌握状态（localStorage 键名保持一致） */
+const LS_MASTERED = "cnmDiagnose.mastered.v1";
+let mastery = { mastered: new Set(), shaky: new Set(), weak: new Set() };
+function loadMastery() {
+  try {
+    const v = JSON.parse(localStorage.getItem(LS_MASTERED) || "null");
+    if (!v) return;
+    mastery.mastered = new Set(v.mastered || []);
+    mastery.shaky = new Set(v.shaky || []);
+    mastery.weak = new Set(v.weak || []);
+  } catch (e) { /* ignore */ }
+}
+const STATUS_BADGE = { weak: ["✗ 要先补", "b-weak"], shaky: ["⚠ 不稳", "b-shaky"], mastered: ["✓ 已掌握", "b-ok"] };
+function badgeOf(id) {
+  for (const st of ["weak", "shaky", "mastered"])
+    if (mastery[st].has(id)) return STATUS_BADGE[st];
+  return null;
+}
+
 function gradeKey(t) { return t.external ? "小学" : GRADE_ZH[t.grade] + t.semester; }
 
 async function load() {
@@ -160,6 +186,7 @@ async function load() {
   }
   for (const m of [pre, post]) for (const arr of m.values())
     arr.sort((x, y) => (x.strength === y.strength ? 0 : x.strength === "hard" ? -1 : 1) || x.id.localeCompare(y.id));
+  loadMastery();
 
   const doms = [...new Set(topics.map(t => t.domain))];
   for (const d of doms) $("#fDomain").append(el("option", {value:d, text:d}));
@@ -223,7 +250,7 @@ function renderList() {
       ul.append(el("li", {class:"grp", text: t.external ? "小学先修（外部节点）" : GRADE_ZH[t.grade] + "年级" + t.semester + "册"}));
     }
     const li = el("li", {class:"item" + (t.id === selected ? " sel" : ""), "data-id":t.id, onclick:() => select(t.id, true)},
-      el("span", {class:"nm"}, ...hi(t.name, q)),
+      el("span", {class:"nm"}, ...hi(t.name, q), badgeOf(t.id) ? el("span", {class:"mst " + badgeOf(t.id)[1], text:" " + badgeOf(t.id)[0]}) : null),
       el("span", {class:"meta", text: t.external ? t.domain : t.domain + " · " + (t.chapter || "").replace(/^.. /, "")}));
     ul.append(li);
   }
@@ -276,8 +303,9 @@ const badge = s => el("span", {class:"badge " + s, text: s === "hard" ? "硬先�
 
 function renderDetail(t) {
   const m = $("#main");
+  const b = badgeOf(t.id);
   const head = el("div", {class:"card"},
-    el("h1", {class:"title", text:t.name}),
+    el("h1", {class:"title"}, t.name, b ? el("span", {class:"mst " + b[1], text:" " + b[0]}) : null),
     el("div", {class:"tags"},
       el("span", {class:"tag" + (t.external ? " ext" : ""), text:t.id}),
       el("span", {class:"tag", text:t.domain}),
@@ -285,7 +313,10 @@ function renderDetail(t) {
                  : [el("span", {class:"tag", text:GRADE_ZH[t.grade] + "年级" + t.semester}),
                     el("span", {class:"tag", text:TYPE_ZH[t.type] || t.type}),
                     el("span", {class:"tag", text:t.chapter})]),
-    el("p", {text:t.description}));
+    el("p", {text:t.description}),
+    !t.external ? el("div", {class:"toolbar", style:"margin-top:8px"},
+      el("a", {class:"diag-link", style:"border:1px solid var(--line); border-radius:6px; padding:3px 10px; background:var(--accent); color:#fff; text-decoration:none;",
+              href:"diagnose/?target=" + encodeURIComponent(t.id), text:"诊断这个知识点 →"})) : null);
   const parts = [head];
   if (!t.external) {
     parts.push(el("div", {class:"card"}, el("h2", {text:"掌握标准"}),

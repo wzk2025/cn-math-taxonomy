@@ -5,10 +5,10 @@
   const LS_SESSION = 'cnmDiagnose.session.v2';
   const LS_SETTINGS = 'cnmDiagnose.settings.v2';
   const LS_SEEN = 'cnmDiagnose.seen.v1';
-  const LIMIT_MIN = 8, LIMIT_MAX = 30;
+  const LIMIT_MIN = 8, LIMIT_MAX = 30, LIMIT_DEFAULT = 12;
   const VOLUMES = [['七上', '七年级上册'], ['七下', '七年级下册'], ['八上', '八年级上册'], ['八下', '八年级下册'], ['九上', '九年级上册'], ['九下', '九年级下册']];
   const RESULT_LABEL = { correct: '对', wrong: '错', skip: '不会' };
-  const STATUS_LABEL = { mastered: '已掌握', shaky: '不稳', weak: '薄弱', unknown: '未测' };
+  const STATUS_LABEL = { mastered: '已掌握', shaky: '不稳', weak: '薄弱', unknown: '没测到' };
   const DIFF_LABEL = { basic: '基础', standard: '标准', advanced: '提高' };
   const TYPE_LABEL = { numeric: '数值题', choice: '选择题', short: '短答题', self: '开放题', legacy: '诊断题' };
 
@@ -53,11 +53,46 @@
   function lsGet(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 隐私模式等 */ } }
   function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }
+
+  /* ------------------------------------------------------------ 数学式渲染 */
+  // 题库题干/答案用 $...$ 包裹 LaTeX。优先 KaTeX（本地打包），没有则退化为纯文本清洗：
+  // 去掉 $、\frac{a}{b} -> (a/b)、x^2 -> x²、\\sqrt{a} -> √(a)、\times \div \pm \le \ge \ne \pi 等。
+  function texFallback(s) {
+    return s
+      .replace(/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '($1)/($2)')
+      .replace(/\\sqrt\s*\{([^{}]*)\}/g, '√($1)')
+      .replace(/\\times/g, '×').replace(/\\div/g, '÷').replace(/\\pm/g, '±')
+      .replace(/\\leq?/g, '≤').replace(/\\geq?/g, '≥').replace(/\\neq?/g, '≠')
+      .replace(/\\pi/g, 'π').replace(/\\angle/g, '∠').replace(/\\degree/g, '°')
+      .replace(/\\cdot/g, '·').replace(/\\perp/g, '⊥').replace(/\\parallel/g, '∥')
+      .replace(/([A-Za-z0-9π)\]])\^\s*\{?([0-9]+)\}?/g, function (_, base, exp) {
+        const sup = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+        return base + String(exp).split('').map(function (d) { return sup[+d]; }).join('');
+      })
+      .replace(/\$\s*/g, '').replace(/\s*\$/g, '');
+  }
+  // 返回 DOM 节点数组：含 $...$ 的段用 KaTeX 渲染；纯文本也做轻清洗（x^2 -> x² 等）
+  function mathNodes(str) {
+    const parts = String(str).split(/\$(.+?)\$/g);  // 偶数下标为普通文本，奇数下标为数学
+    if (parts.length === 1) return [document.createTextNode(texFallback(str))];
+    const out = [];
+    parts.forEach(function (p, i) {
+      if (!p) return;
+      if (i % 2 === 0) { out.push(document.createTextNode(p)); return; }
+      const span = document.createElement('span');
+      if (window.katex) {
+        try { window.katex.render(p, span, { throwOnError: false, output: 'html' }); }
+        catch (e) { span.textContent = texFallback('$' + p + '$'); }
+      } else span.textContent = texFallback(p);
+      out.push(span);
+    });
+    return out;
+  }
   function nameOf(id) { const t = D.graph.byId[id]; return t ? t.name : id; }
   function getSettings() {
     const st = lsGet(LS_SETTINGS) || {};
     let limit = parseInt(st.limit, 10);
-    if (!(limit >= LIMIT_MIN && limit <= LIMIT_MAX)) limit = E.DEFAULT_LIMIT;
+    if (!(limit >= LIMIT_MIN && limit <= LIMIT_MAX)) limit = LIMIT_DEFAULT;
     return { limit: limit };
   }
   function seenList() { const v = lsGet(LS_SEEN); return Array.isArray(v) ? v : []; }
@@ -198,6 +233,7 @@
   /* ------------------------------------------------------------ 开始页 */
   function renderStart(errMsg) {
     const page = h('div');
+    page.append(reviewHint());
     const saved = lsGet(LS_SESSION);
     if (saved && saved.targets && D.graph.byId[saved.targets[0]]) {
       page.append(h('div', { class: 'banner' },
@@ -219,10 +255,10 @@
     });
     page.append(h('div', { class: 'card' },
       h('h2', { text: '1. 选择诊断目标' }),
-      h('p', { class: 'muted' }, '选一个你想学会（或想检查）的知识点，或者选整章。工具会从目标开始提问：第一题答对就算掌握；答错会再出一道同级或更容易的题——第二题也错才算薄弱，并回溯到它的先修知识点，找到真正薄弱的根因；第二题答对则标为「不稳」。'),
+      h('p', { class: 'muted' }, '选一个你想学会（或想检查）的知识点，或者选整章。工具会从它开始出题：第一题答对就先算掌握；答错会再出一道更简单的题确认，并顺着「先学什么才能学这个」的线索往回找，找到你真正没学会的那一环。'),
       h('div', { class: 'row' },
         h('label', null, '题量上限（' + LIMIT_MIN + '–' + LIMIT_MAX + '）：', limitInput),
-        h('span', { class: 'muted small' }, '每个知识点最多问 2 题；达到上限时，没测到的知识点会标为「未测」。')),
+        h('span', { class: 'muted small' }, '每个知识点最多问 2 题；题量用完时，没测到的会标为「没测到」。')),
       h('div', { class: 'row', style: 'margin-top:8px' },
         h('input', {
           type: 'search', class: 'grow', id: 'search', placeholder: '搜索知识点（名称、描述、章节），如：配方法、一次函数、勾股',
@@ -282,6 +318,10 @@
   /* ------------------------------------------------------------ 出题页 */
   function reasonFor(item) {
     const id = item.topicId;
+    // 连续答错的情绪保护：引擎正在往先修回溯，这恰是最沮丧的时刻
+    const recent = session.answers.slice(-3);
+    if (recent.length >= 2 && recent.every(function (a) { return a.result !== 'correct'; }))
+      return '没关系，这几题有点难是正常的——现在正在帮你找到是哪一环没接上，越往下问会越简单。';
     if (item.attempt === 2) return '第一题没答对，再出一道' + (item.question.difficulty === 'basic' ? '更基础' : '同级或更容易') + '的题确认：这一题也错才算薄弱，答对则标为「不稳」。';
     for (let i = session.answers.length - 1; i >= 0; i--) {
       const a = session.answers[i];
@@ -303,6 +343,22 @@
     renderQuestion(item);
   }
 
+  // 键盘作答：选择题按 A-D / 1-4 直接选中，回车提交；数值题回车提交（输入框自身已处理）
+  function questionKeydown(e) {
+    if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea') return;
+    const q = D && session && (function () { const it = E.nextItem(D.graph, session); return it ? it.question : null; })();
+    if (!q || q.type !== 'choice' || ui.phase !== 'ask') return;
+    const keys = (q.choices || []).map(function (c) { return c.key; });
+    const k = e.key.toUpperCase();
+    let hit = null;
+    if (keys.indexOf(k) >= 0) hit = k;
+    else if (/^[1-9]$/.test(e.key)) { const idx = +e.key - 1; if (keys[idx]) hit = keys[idx]; }
+    if (hit) { ui.picked = hit; ui.answer = hit; const it = E.nextItem(D.graph, session); renderQuestion(it); }
+  }
+  document.addEventListener('keydown', questionKeydown);
+
   function answerText(q) {
     if (q.type === 'choice') {
       const c = (q.choices || []).find(function (x) { return x.key === q.answer; });
@@ -313,8 +369,8 @@
 
   function feedbackBlock(q) {
     return h('div', { class: 'feedback' },
-      h('div', { class: 'refans' }, h('b', null, '参考答案：'), answerText(q)),
-      q.explanation ? h('div', { class: 'explain', id: 'explain' }, h('b', null, '解析：'), q.explanation) : null);
+      h('div', { class: 'refans' }, h('b', null, '参考答案：'), mathNodes(answerText(q))),
+      q.explanation ? h('div', { class: 'explain', id: 'explain' }, h('b', null, '解析：'), mathNodes(q.explanation)) : null);
   }
 
   function renderQuestion(item) {
@@ -337,7 +393,7 @@
         h('span', { class: 'tag', text: TYPE_LABEL[q.type] || q.type }),
         h('span', { class: 'tag', text: '本知识点第 ' + item.attempt + ' 题' })),
       h('div', { class: 'reason', text: reasonFor(item) }),
-      h('div', { class: 'q-text', id: 'q-text', text: q.prompt }));
+      h('div', { class: 'q-text', id: 'q-text' }, mathNodes(q.prompt)));
 
     if (ui.phase === 'ask') {
       if (q.type === 'choice') {
@@ -345,7 +401,7 @@
           return h('button', {
             class: 'choice' + (ui.picked === c.key ? ' picked' : ''), id: 'choice-' + c.key, 'data-key': c.key,
             onclick: function () { ui.picked = c.key; ui.answer = c.key; renderQuestion(item); }
-          }, h('b', { text: c.key + '.' }), ' ', c.text);
+          }, h('b', { text: c.key + '.' }), ' ', mathNodes(c.text));
         })));
       } else if (q.type === 'self') {
         card.append(h('textarea', {
@@ -354,7 +410,9 @@
         }));
       } else {
         card.append(h('input', {
-          type: 'text', class: 'ans-input', id: 'ans', autocomplete: 'off', placeholder: '在这里输入答案（数字、分数、多个答案用逗号或“和”分开）', value: ui.answer,
+          type: 'text', class: 'ans-input', id: 'ans', autocomplete: 'off',
+          inputmode: q.type === 'numeric' ? 'decimal' : 'text',
+          placeholder: '在这里输入答案（数字、分数、多个答案用逗号或“和”分开）', value: ui.answer,
           oninput: function (e) { ui.answer = e.target.value; },
           onkeydown: function (e) { if (e.key === 'Enter' && !e.isComposing) judgeAndGo(item); }
         }));
@@ -452,13 +510,40 @@
     const st = E.statusOf(session, id);
     const out = [];
     if (targetSet.has(id)) out.push(tag('target', '目标'));
-    if (rootSet.has(id)) out.push(tag('root', '根因'));
+    if (rootSet.has(id)) out.push(tag('root', '要先补'));
     out.push(tag(st, STATUS_LABEL[st]));
     if (D.graph.byId[id].external) out.push(tag('ext', '小学'));
     return out;
   }
 
+  const LS_MASTERY = 'cnmDiagnose.mastered.v1';
+  /* 间隔复习：距上次诊断超过 3 天且仍有要补的知识点时，提醒复测 */
+  function reviewHint() {
+    try {
+      const m = JSON.parse(localStorage.getItem(LS_MASTERY) || 'null');
+      if (!m || !m.updatedAt || !m.weak || !m.weak.length) return null;
+      const days = (Date.now() - new Date(m.updatedAt).getTime()) / 86400000;
+      if (days < 3) return null;
+      const names = m.weak.slice(0, 4).map(nameOf).join('、') + (m.weak.length > 4 ? ' 等 ' + m.weak.length + ' 个' : '');
+      return h('div', { class: 'banner demo' },
+        '距上次诊断已过 ' + Math.floor(days) + ' 天。上次的「要先补」里还有：' + names + '。隔几天再测一次，记得更牢——',
+        h('button', { onclick: function () { startSession(m.weak, '复习：' + (m.label || '上次要补的知识点')); } }, '现在就复习'));
+    } catch (e) { return null; }
+  }
+
+  /* 把最新一次诊断的掌握状态写入共享 localStorage，图谱页会读取并显示徽章 */
+  function publishMastery() {
+    try {
+      const sum = E.summarize(D.graph, session);
+      localStorage.setItem('cnmDiagnose.mastered.v1', JSON.stringify({
+        mastered: sum.mastered, shaky: sum.shaky, weak: sum.weak,
+        updatedAt: new Date().toISOString(), label: sessionMeta.label
+      }));
+    } catch (e) { /* ignore */ }
+  }
+
   function renderResult() {
+    publishMastery();
     const sum = E.summarize(D.graph, session);
     const rootSet = new Set(sum.roots.map(function (r) { return r.id; }));
     const targetSet = new Set(session.targets);
@@ -466,11 +551,14 @@
     if (demo) page.append(demoBanner());
 
     const targetsMastered = session.targets.every(function (id) { return E.statusOf(session, id) === 'mastered'; });
+    const targetNames = session.targets.length <= 3 ? session.targets.map(nameOf).join('、')
+      : session.targets.slice(0, 2).map(nameOf).join('、') + ' 等 ' + session.targets.length + ' 个知识点';
+    const pathLen = sum.path.length;
     let headline;
-    if (!sum.roots.length && !sum.shaky.length && targetsMastered) headline = '目标知识点已掌握，没有发现需要补的先修。';
-    else if (!sum.roots.length && !sum.shaky.length) headline = '没有判出薄弱点，但目标尚未全部测到。';
-    else if (!sum.roots.length) headline = '没有判出薄弱点，但有 ' + sum.shaky.length + ' 个知识点「不稳」（第一题没答对、第二题答对），建议巩固。';
-    else headline = '共发现 ' + sum.roots.length + ' 个薄弱根因' + (sum.shaky.length ? '、' + sum.shaky.length + ' 个不稳的知识点' : '') + '，按下面的学习路径从前往后补。';
+    if (!sum.roots.length && !sum.shaky.length && targetsMastered) headline = '太棒了，「' + targetNames + '」你已掌握，先修也都没问题 ✅';
+    else if (!sum.roots.length && !sum.shaky.length) headline = '目前没有发现要补的，继续答几题就能把「' + targetNames + '」完全测完。';
+    else if (!sum.roots.length) headline = '你离掌握「' + targetNames + '」很近了：' + sum.shaky.length + ' 个知识点有点不稳，巩固一下就好。';
+    else headline = '你离学会「' + targetNames + '」还差 ' + pathLen + ' 个基础点，别担心——下面已经帮你按顺序排好，从第一个开始补就行。';
 
     const summaryCard = h('div', { class: 'card', id: 'summary' },
       h('h2', { text: '诊断结果：' + sessionMeta.label }),
@@ -482,7 +570,7 @@
         stat('ok', sum.mastered.length, '已掌握'),
         stat('unk', sum.untested.length, '未测')),
       sum.unconfirmed.length ? h('p', { class: 'notice' }, '「' + sum.unconfirmed.map(nameOf).join('」「') + '」只答了第一题（答错）就到了题量上限，没来得及复测，暂按薄弱处理。') : null,
-      sum.limitReached ? h('p', { class: 'notice' }, '已达到题量上限（' + sum.limit + '），剩余没测到的知识点标为「未测」。薄弱根因的先修里若有未测点，真正的根因可能更靠前。',
+      sum.limitReached ? h('p', { class: 'notice' }, '本次的题量用完了，还没测到的知识点标为「没测到」。要补的知识点的先修里若有没测到的，真正要补的可能还在更前面。',
         h('button', { class: 'no-print', style: 'margin-left:8px', onclick: function () { rebuild(session.answers, Math.min(session.limit + 4, 60)); } }, '再多答 4 题')) : null,
       h('p', { class: 'muted small' }, '自动判题只是近似的，答题记录里可以更正任何一题。生成时间：' + new Date().toLocaleString('zh-CN')),
       h('div', { class: 'row no-print' },
@@ -493,33 +581,40 @@
     page.append(summaryCard);
 
     page.append(h('div', { class: 'card', id: 'roots' },
-      h('h2', { text: '薄弱的先修知识点（根因）' }),
-      h('p', { class: 'muted small' }, '根因 = 被判为薄弱、且它的直接先修里没有薄弱点的知识点。点击展开看描述、掌握标准和课标条目。'),
+      h('h2', { text: '要先补的知识点' }),
+      h('p', { class: 'muted small' }, '这些是最需要先补的点（补它们的「根」）。点击展开看描述、掌握标准和课标条目。'),
       sum.roots.length ? sum.roots.map(function (r) {
         const notes = h('div');
-        if (r.pendingPrereqs.length) notes.append(h('div', { class: 'notice', text: '它的先修「' + r.pendingPrereqs.map(nameOf).join('」「') + '」没来得及测（题量用完），真正的根因可能更靠前。' }));
-        if (r.externalPrereqs.length) notes.append(h('div', { class: 'muted small', text: '小学先修（无诊断题，未测）：' + r.externalPrereqs.map(nameOf).join('、') }));
+        if (r.pendingPrereqs.length) notes.append(h('div', { class: 'notice', text: '它的先修「' + r.pendingPrereqs.map(nameOf).join('」「') + '」还没测到（题量用完），真正要补的可能还在更前面。' }));
+        if (r.externalPrereqs.length) notes.append(h('div', { class: 'muted small', text: '小学先修（没有诊断题）：' + r.externalPrereqs.map(nameOf).join('、') }));
         return topicItem(r.id, statusTags(r.id, rootSet, targetSet), notes);
       }) : h('p', { text: targetsMastered ? '没有。' : '暂未发现。' })));
 
     page.append(h('div', { class: 'card', id: 'shaky' },
-      h('h2', { text: '不稳的知识点（' + sum.shaky.length + '）' }),
-      h('p', { class: 'muted small' }, '第一题没答对，但第二题（同级或更容易）答对了：可能是粗心，也可能掌握得不牢。它们会出现在学习路径里需要巩固，但工具没有继续向它们的先修回溯（只有两题都错才回溯）。'),
+      h('h2', { text: '有点不稳的知识点（' + sum.shaky.length + '）' }),
+      h('p', { class: 'muted small' }, '第一题没答对，但第二题（更简单的）答对了：可能是粗心，也可能掌握得不牢。建议把它们也巩固一下。'),
       sum.shaky.length ? sum.shaky.map(function (id) { return topicItem(id, statusTags(id, rootSet, targetSet)); }) : h('p', { text: '没有。' })));
 
     page.append(h('div', { class: 'card', id: 'path' },
-      h('h2', { text: '推荐学习路径' }),
-      h('p', { class: 'muted small' }, '从根因（和「不稳」的点）出发到目标之间、尚未判定为掌握的知识点，按先修顺序（拓扑序）排列，从上往下学。「不稳」「未测」的点也在路径上，建议先巩固 / 自查。'),
+      h('h2', { text: '建议这样补（按顺序学）' }),
+      h('p', { class: 'muted small' }, '从最基础的开始，从上往下一个一个学，学完一个就可以在「答题记录」里更正并重新看结果。'),
       sum.path.length ? h('ol', { class: 'path' }, sum.path.map(function (p) {
-        return h('li', null, topicItem(p.id, statusTags(p.id, rootSet, targetSet)));
+        return h('li', null, topicItem(p.id, statusTags(p.id, rootSet, targetSet),
+          h('div', { class: 'row no-print', style: 'margin-top:6px' },
+            h('button', {
+              onclick: function () {
+                if (confirm('把「' + nameOf(p.id) + '」作为新目标开始一次诊断吗？（当前结果仍可在答题记录里查看，但会被新的诊断覆盖）'))
+                  startSession([p.id], nameOf(p.id));
+              }
+            }, '学完了？测一测它'))));
       })) : h('p', { text: '不需要补课。' })));
 
     page.append(h('div', { class: 'card', id: 'graph' },
       h('h2', { text: '路径图' }),
       h('div', { class: 'legend' },
         h('span', null, h('i', { class: 'm' }), '已掌握'), h('span', null, h('i', { class: 's' }), '不稳'), h('span', null, h('i', { class: 'w' }), '薄弱'),
-        h('span', null, h('i', { class: 'u' }), '未测'), h('span', null, h('i', { class: 't' }), '目标（蓝色粗框）'),
-        h('span', { class: 'muted' }, '箭头：先修 → 后续；虚线表示中间省略了未画出的知识点；浅色为软先修')),
+        h('span', null, h('i', { class: 'u' }), '没测到'), h('span', null, h('i', { class: 't' }), '目标（蓝色粗框）'),
+        h('span', { class: 'muted' }, '箭头：先学 → 后学；虚线表示中间省略了一些知识点；浅色是次要先修')),
       h('div', { class: 'svgwrap' }, renderGraph(sum))));
 
     page.append(h('details', { class: 'card', id: 'mastered' },
@@ -530,8 +625,8 @@
       })));
 
     page.append(h('details', { class: 'card', id: 'untested' },
-      h('summary', null, h('b', null, '未测的知识点（' + sum.untested.length + '）')),
-      h('p', { class: 'muted small' }, '小学外部节点没有诊断题，不出题；其余是题量用完或不必再测而没测到的点。'),
+      h('summary', null, h('b', null, '没测到的知识点（' + sum.untested.length + '）')),
+      h('p', { class: 'muted small' }, '小学的内容没有诊断题；其余是本次题量用完或不需要再测的点。'),
       sum.untested.map(function (id) { return topicItem(id, statusTags(id, rootSet, targetSet)); })));
 
     page.append(standardsCard(sum));
@@ -570,7 +665,7 @@
         }
       }, ['correct', 'wrong', 'skip'].map(function (r) { return h('option', { value: r, selected: r === a.result }, RESULT_LABEL[r]); }));
       return h('tr', null, h('td', { text: String(i + 1) }),
-        h('td', null, nameOf(a.id), h('div', { class: 'muted small', text: q.prompt.length > 60 ? q.prompt.slice(0, 59) + '…' : q.prompt })),
+        h('td', null, nameOf(a.id), h('div', { class: 'muted small' }, q.prompt.length > 60 ? mathNodes(q.prompt.slice(0, 59) + '…') : mathNodes(q.prompt))),
         h('td', { class: 'muted', text: a.text || '' }),
         h('td', null, sel), h('td', { class: 'muted', text: q.answer }));
     });
@@ -609,11 +704,11 @@
       const p = pos[n.id];
       const name = nameOf(n.id);
       const g = s('g', { class: 'n ' + n.status + (n.isTarget ? ' target' : ''), transform: 'translate(' + p.x + ',' + p.y + ')' },
-        s('title', null, name + '（' + STATUS_LABEL[n.status] + (n.isTarget ? '，目标' : '') + (n.isRoot ? '，根因' : '') + '）'),
+        s('title', null, name + '（' + STATUS_LABEL[n.status] + (n.isTarget ? '，目标' : '') + (n.isRoot ? '，要先补' : '') + '）'),
         s('rect', { class: 'body', width: W, height: H, rx: 7 }),
         s('text', { x: W / 2, y: H / 2 + 5, 'text-anchor': 'middle' }, name.length > 12 ? name.slice(0, 11) + '…' : name));
       if (n.isRoot) {
-        g.append(s('rect', { x: -8, y: -10, width: 38, height: 19, rx: 9.5, fill: '#dc2626' }), s('text', { class: 'mark', x: 11, y: 4, 'text-anchor': 'middle' }, '根因'));
+        g.append(s('rect', { x: -8, y: -10, width: 38, height: 19, rx: 9.5, fill: '#dc2626' }), s('text', { class: 'mark', x: 11, y: 4, 'text-anchor': 'middle' }, '先补'));
       }
       if (n.isTarget) {
         g.append(s('rect', { x: W - 30, y: -10, width: 38, height: 19, rx: 9.5, fill: '#2563eb' }), s('text', { class: 'mark', x: W - 11, y: 4, 'text-anchor': 'middle' }, '目标'));
