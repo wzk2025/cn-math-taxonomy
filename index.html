@@ -118,6 +118,14 @@
   .figbox .fgf { fill:var(--text); stroke:none; }
   .figbox .faf { fill:var(--accent); stroke:none; }
   .figbox .fbar { fill:rgba(37,99,235,.35); stroke:var(--accent); }
+  /* 图内文字：颜色走填充、一律不描边不加粗 */
+  .figbox text.ln { fill:var(--text); stroke:none; }
+  .figbox text.ac { fill:var(--accent); stroke:none; }
+  .figbox text.mt { fill:var(--muted); stroke:none; }
+  .figbox text.c2 { fill:#059669; stroke:none; }
+  .figbox text.c3 { fill:#d97706; stroke:none; }
+  .figbox text.fw, .figbox text.fa, .figbox text.fa2, .figbox text.fa3 { fill:var(--text); stroke:none; }
+  .figbox .bold { font-weight:normal; }
   .fig-note { color:var(--muted); font-size:13px; margin:8px 0 0; }
   /* 通俗讲解 */
   .explain-body { font-size:14px; line-height:1.7; }

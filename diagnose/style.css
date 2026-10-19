@@ -195,6 +195,17 @@ svg.graph .n.shaky rect.body { fill: #fef3c7; stroke: #d97706; }
 .figbox .fgf, .figure-body .fgf { fill: var(--text); stroke: none; }
 .figbox .faf, .figure-body .faf { fill: var(--accent); stroke: none; }
 .figbox .fbar, .figure-body .fbar { fill: rgba(37, 99, 235, .35); stroke: var(--accent); }
+/* 图内文字：颜色走填充、一律不描边不加粗（描边会让字发虚像有阴影） */
+.figbox text.ln, .figure-body text.ln { fill: var(--text); stroke: none; }
+.figbox text.ac, .figure-body text.ac { fill: var(--accent); stroke: none; }
+.figbox text.mt, .figure-body text.mt { fill: var(--muted); stroke: none; }
+.figbox text.c2, .figure-body text.c2 { fill: #059669; stroke: none; }
+.figbox text.c3, .figure-body text.c3 { fill: #d97706; stroke: none; }
+.figbox text.fw, .figure-body text.fw { fill: var(--text); stroke: none; }
+.figbox text.fa, .figure-body text.fa { fill: var(--text); stroke: none; }
+.figbox text.fa2, .figure-body text.fa2 { fill: var(--text); stroke: none; }
+.figbox text.fa3, .figure-body text.fa3 { fill: var(--text); stroke: none; }
+.figbox .bold, .figure-body .bold { font-weight: normal; }
 .fig-note { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
 
 /* ---------- 通俗讲解 ---------- */
