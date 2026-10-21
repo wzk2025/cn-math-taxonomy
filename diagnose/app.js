@@ -337,7 +337,8 @@
 
   function renderStart(errMsg) {
     const page = h('div');
-    page.append(reviewHint());
+    const hint = reviewHint();
+    if (hint) page.append(hint);
     const saved = lsGet(sessionKey());
     if (saved && saved.targets && D.graph.byId[saved.targets[0]]) {
       page.append(h('div', { class: 'banner' },
