@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>学习画像 · 中小学知识图谱</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f766e'/%3E%3Ccircle cx='9' cy='21' r='2.5' fill='white'/%3E%3Ccircle cx='17' cy='11' r='2.5' fill='white'/%3E%3Ccircle cx='24' cy='20' r='2.5' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="diagnose/vendor/katex/katex.min.css">
+<link rel="stylesheet" href="diagnose/style.css">
+<style>
+  .bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: #e2e8f0; margin: 4px 0 2px; }
+  .bar > i { display: block; height: 100%; }
+  .bar > i.m { background: var(--ok, #16a34a); }
+  .bar > i.s { background: #d97706; }
+  .bar > i.w { background: var(--bad, #dc2626); }
+  .volrow { margin: 10px 0; }
+  .volrow .lbl { display: flex; justify-content: space-between; font-size: 13px; }
+  .volrow .pct { color: var(--muted); }
+  .stat.ok2 { background: #fef3c7; }
+  h2 { margin-top: 4px; }
+  .hint-empty { padding: 40px 0; text-align: center; }
+  .clear-btn { color: var(--bad); }
+  @media (prefers-color-scheme: dark) {
+    .bar { background: #334155; }
+  }
+</style>
+</head>
+<body>
+<a class="top-banner" href="https://test.pansgo.com/?from=math-top" target="_blank" rel="noopener">🧠 儿童智商测试</a>
+<header class="site-header no-print">
+  <a class="brand" href="./">
+    <svg class="logo" viewBox="0 0 32 32" width="32" height="32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="currentColor"/><circle cx="9" cy="21" r="2.5" fill="#fff"/><circle cx="17" cy="11" r="2.5" fill="#fff"/><circle cx="24" cy="20" r="2.5" fill="#fff"/><path d="M11.2 19.2 15.2 12.8M18.6 12.6 22.2 18.2" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/></svg>
+    <span class="brand-name">中小学知识图谱</span>
+  </a>
+  <nav class="site-nav" aria-label="主导航">
+    <a class="nav-link" href="./">首页</a>
+    <a class="nav-link" href="explore/">知识图谱</a>
+    <a class="nav-link" href="diagnose/">诊断</a>
+    <a class="nav-link active" href="portrait.html" aria-current="page">学习画像</a>
+    <a class="nav-link" href="https://github.com/xiaoyang111222/cn-math-taxonomy" target="_blank" rel="noopener noreferrer">关于</a>
+  </nav>
+</header>
+<p class="muted small" style="max-width:880px;margin:10px auto 0;padding:0 16px;">由历次诊断记录汇总而成，只保存在本机浏览器里。数据为 AI 生成的草稿，仅供参考。</p>
+<main id="root"><p class="loading">加载中……</p></main>
+<script src="diagnose/engine.js"></script>
+<script src="portrait.js"></script>
+</body>
+</html>

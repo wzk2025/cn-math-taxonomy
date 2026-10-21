@@ -367,6 +367,29 @@
     if (topic.description) parts.push(el('p', { class: 'desc', text: topic.description }));
     if (topic.root_reason) parts.push(el('p', { class: 'root-reason', text: topic.root_reason }));
 
+    // 图解：该知识点若配有概念示意图（fork 的 figures.js，仅数学）则展示
+    var FigLib = window.CnmFigures;
+    if (FigLib) {
+      var fig = null;
+      try { fig = FigLib.forTopic(topic); } catch (e) { fig = null; }
+      if (fig) {
+        var figBody = el('div', { class: 'figbox' });
+        figBody.innerHTML = fig.svg + (fig.note ? '<p class="fig-note">' + fig.note + '</p>' : '');
+        parts.push(el('section', null, el('h2', { text: '图解 · ' + fig.title }), figBody));
+      }
+    }
+    // 通俗讲解：生活化类比 + 口诀 + 易错点 + 例题（fork 的 explain.js，仅数学）
+    var ExplLib = window.CnmExplain;
+    if (ExplLib) {
+      var expl = null;
+      try { expl = ExplLib.forTopic(topic); } catch (e) { expl = null; }
+      if (expl) {
+        var explBody = el('div', { class: 'explain-body' });
+        explBody.innerHTML = expl.html;
+        parts.push(el('section', null, el('h2', { text: '通俗讲解 · ' + expl.title }), explBody));
+      }
+    }
+
     if (topic.mastery_criteria && topic.mastery_criteria.length) {
       parts.push(el('section', null,
         el('h2', { text: '掌握标准' }),

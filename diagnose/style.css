@@ -35,6 +35,21 @@ label { font-weight: 700; }
 .topic-row .nm { flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; font-weight: 700; }
 .topic-row .sec { color: var(--muted); font-size: 0.88rem; }
 #search { margin-top: 8px; }
+.topic-row button, .chap-head button { padding: 1px 10px; font-size: 12px; }
+
+/* 练习卷（按章节打印 A4） */
+.ws-ctl { margin-bottom: 10px; }
+.ws-head { border-bottom: 2px solid var(--text); padding-bottom: 4px; margin-bottom: 4px; }
+.ws-head h2 { margin: 0 0 2px; }
+.ws-who { margin: 2px 0 4px; font-size: 13px; }
+.ws-topic { margin: 14px 0 0; }
+.ws-item { padding: 6px 0 10px; border-bottom: 1px solid #f0f2f4; }
+.ws-q { line-height: 1.75; }
+.ws-choices { margin: 2px 0 4px 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 18px; }
+.ws-blank { border-bottom: 1px dashed #94a3b8; min-height: 2.2em; margin: 8px 4px 0; }
+.ws-blank.tall { min-height: 3.2em; }
+.ws-blank.short { min-height: 1.4em; }
+.ws-answers .ws-ans { padding: 4px 0; border-bottom: 1px dotted var(--line); line-height: 1.7; }
 
 .progress { height: 14px; background: var(--bg-muted); border-radius: 999px; overflow: hidden; margin: 8px 0; }
 .progress > i { display: block; height: 100%; background: linear-gradient(90deg, var(--brand), var(--junior)); border-radius: inherit; }
@@ -187,12 +202,79 @@ table.log select { min-height: 44px; }
 }
 
 @media print {
+  @page { size: A4 portrait; margin: 14mm 12mm; }
   body { background: #fff; }
   .no-print { display: none !important; }
   main#root { max-width: none; padding: 0; }
   .card { break-inside: avoid-page; box-shadow: none; }
+  /* 练习卷：整卷与答案卡都允许跨页，只按小条目避分页 */
+  .ws-sheet, .ws-answers { break-inside: auto; border: none; padding: 0; }
+  .ws-answers { break-before: page; margin-top: 0; }
+  .ws-item, .ws-ans, .ws-head { break-inside: avoid; }
+  .ws-head h2 { font-size: 17px; text-align: center; }
   details.topic { break-inside: avoid; }
   #path-cy { height: 520px; border: none; background: #fff; }
   a { color: inherit; text-decoration: none; }
   select { border: none; appearance: none; -webkit-appearance: none; }
 }
+/* 选择题难度标签 */
+.tag.diff-basic { background: #dcfce7; color: #166534; }
+.tag.diff-standard { background: #dbeafe; color: #1e40af; }
+.tag.diff-advanced { background: #fae8ff; color: #86198f; }
+.stat.shaky { background: #fef3c7; }
+svg.graph .n.shaky rect.body { fill: #fef3c7; stroke: #d97706; }
+.legend i.s { background: #fef3c7; border-color: #d97706; }
+
+/* ---------- 图解（概念示意图） ---------- */
+.figure-card, .fig-card { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); margin-top: 10px; }
+.figure-card { overflow: hidden; }
+.figure-card > summary { cursor: pointer; padding: 8px 12px; font-weight: 600; color: var(--accent); user-select: none; }
+.figure-card[open] > summary { border-bottom: 1px dashed var(--line); }
+.figure-body, .figbox { padding: 10px 12px 12px; }
+.fig-card .figbox { padding: 0; }
+.figbox svg, .figure-body svg { width: 100%; max-width: 600px; height: auto; display: block; margin: 0 auto; }
+.figbox text, .figure-body text { fill: var(--text); font-size: 14px; font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+.figbox .txm, .figure-body .txm { fill: var(--muted); font-size: 12.5px; }
+.figbox .big, .figure-body .big { font-size: 20px; }
+.figbox .ln, .figure-body .ln { stroke: var(--text); stroke-width: 1.7; fill: none; stroke-linecap: round; }
+.figbox .ac, .figure-body .ac { stroke: var(--accent); stroke-width: 2.2; fill: none; stroke-linecap: round; }
+.figbox .mt, .figure-body .mt { stroke: var(--muted); stroke-width: 1.3; fill: none; }
+.figbox .mtf, .figure-body .mtf { fill: var(--muted); stroke: none; }
+.figbox .c2f, .figure-body .c2f { fill: #059669; stroke: none; }
+.figbox .c3f, .figure-body .c3f { fill: #d97706; stroke: none; }
+.figbox .bold, .figure-body .bold { font-weight: 600; }
+.figbox .c2, .figure-body .c2 { stroke: #059669; stroke-width: 2.2; fill: none; }
+.figbox .c3, .figure-body .c3 { stroke: #d97706; stroke-width: 2.2; fill: none; }
+.figbox .dash, .figure-body .dash { stroke-dasharray: 6 5; }
+.figbox .fw, .figure-body .fw { fill: var(--panel); stroke: var(--text); stroke-width: 1.7; }
+.figbox .fa, .figure-body .fa { fill: rgba(37, 99, 235, .14); stroke: var(--accent); stroke-width: 1.7; }
+.figbox .fa2, .figure-body .fa2 { fill: rgba(5, 150, 105, .16); stroke: #059669; stroke-width: 1.7; }
+.figbox .fa3, .figure-body .fa3 { fill: rgba(217, 119, 6, .18); stroke: #d97706; stroke-width: 1.7; }
+.figbox .fgf, .figure-body .fgf { fill: var(--text); stroke: none; }
+.figbox .faf, .figure-body .faf { fill: var(--accent); stroke: none; }
+.figbox .fbar, .figure-body .fbar { fill: rgba(37, 99, 235, .35); stroke: var(--accent); }
+/* 图内文字：颜色走填充、一律不描边不加粗（描边会让字发虚像有阴影） */
+.figbox text.ln, .figure-body text.ln { fill: var(--text); stroke: none; }
+.figbox text.ac, .figure-body text.ac { fill: var(--accent); stroke: none; }
+.figbox text.mt, .figure-body text.mt { fill: var(--muted); stroke: none; }
+.figbox text.c2, .figure-body text.c2 { fill: #059669; stroke: none; }
+.figbox text.c3, .figure-body text.c3 { fill: #d97706; stroke: none; }
+.figbox text.fw, .figure-body text.fw { fill: var(--text); stroke: none; }
+.figbox text.fa, .figure-body text.fa { fill: var(--text); stroke: none; }
+.figbox text.fa2, .figure-body text.fa2 { fill: var(--text); stroke: none; }
+.figbox text.fa3, .figure-body text.fa3 { fill: var(--text); stroke: none; }
+.figbox .bold, .figure-body .bold { font-weight: normal; }
+.fig-note { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+
+/* ---------- 通俗讲解 ---------- */
+.explain-card, .ex-card { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); margin-top: 10px; overflow: hidden; }
+.explain-card > summary { cursor: pointer; padding: 8px 12px; font-weight: 600; color: var(--accent); user-select: none; }
+.explain-card[open] > summary { border-bottom: 1px dashed var(--line); }
+.explain-body { padding: 10px 12px; font-size: 14px; line-height: 1.7; }
+.explain-body .talk { margin: 0 0 8px; }
+.explain-body .mem { background: rgba(37, 99, 235, .10); border-left: 3px solid var(--accent); padding: 6px 10px; border-radius: 4px; margin: 8px 0; }
+.explain-body .pits { margin: 6px 0; padding-left: 20px; }
+.explain-body .pits li { color: #b45309; margin: 3px 0; }
+.explain-body .ex { background: rgba(37, 99, 235, .06); border-radius: 6px; padding: 8px 12px; margin-top: 8px; }
+.explain-body .ex ol { margin: 4px 0 0; padding-left: 22px; }
+.explain-body .ex li { margin: 3px 0; }

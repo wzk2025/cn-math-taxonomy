@@ -208,3 +208,43 @@ body.page-explore .site-footer { flex: none; }
   #cy { height: 420px; flex: none; }
   .detail { border-left: none; border-top: 1px solid var(--line); }
 }
+
+/* ---------- 图解（概念示意图，来自 fork 的 figures.js） ---------- */
+.figbox svg { width: 100%; max-width: 600px; height: auto; display: block; margin: 0 auto; }
+.figbox text { fill: var(--text); font-size: 14px; font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+.figbox .txm { fill: var(--muted); font-size: 12.5px; }
+.figbox .big { font-size: 20px; }
+.figbox .ln { stroke: var(--text); stroke-width: 1.7; fill: none; stroke-linecap: round; }
+.figbox .ac { stroke: var(--accent); stroke-width: 2.2; fill: none; stroke-linecap: round; }
+.figbox .mt { stroke: var(--muted); stroke-width: 1.3; fill: none; }
+.figbox .mtf { fill: var(--muted); stroke: none; }
+.figbox .c2f { fill: #059669; stroke: none; }
+.figbox .c3f { fill: #d97706; stroke: none; }
+.figbox .c2 { stroke: #059669; stroke-width: 2.2; fill: none; }
+.figbox .c3 { stroke: #d97706; stroke-width: 2.2; fill: none; }
+.figbox .dash { stroke-dasharray: 6 5; }
+.figbox .fw { fill: var(--panel); stroke: var(--text); stroke-width: 1.7; }
+.figbox .fa { fill: rgba(37, 99, 235, .14); stroke: var(--accent); stroke-width: 1.7; }
+.figbox .fa2 { fill: rgba(5, 150, 105, .16); stroke: #059669; stroke-width: 1.7; }
+.figbox .fa3 { fill: rgba(217, 119, 6, .18); stroke: #d97706; stroke-width: 1.7; }
+.figbox .fgf { fill: var(--text); stroke: none; }
+.figbox .faf { fill: var(--accent); stroke: none; }
+.figbox .fbar { fill: rgba(37, 99, 235, .35); stroke: var(--accent); }
+/* 图内文字：颜色走填充、一律不描边不加粗（描边会让字发虚像有阴影） */
+.figbox text.ln { fill: var(--text); stroke: none; }
+.figbox text.ac { fill: var(--accent); stroke: none; }
+.figbox text.mt { fill: var(--muted); stroke: none; }
+.figbox text.c2 { fill: #059669; stroke: none; }
+.figbox text.c3 { fill: #d97706; stroke: none; }
+.figbox text.fw, .figbox text.fa, .figbox text.fa2, .figbox text.fa3 { fill: var(--text); stroke: none; }
+.fig-note { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+
+/* ---------- 通俗讲解（来自 fork 的 explain.js） ---------- */
+.explain-body { font-size: 14px; line-height: 1.7; }
+.explain-body .talk { margin: 0 0 8px; }
+.explain-body .mem { background: rgba(37, 99, 235, .10); border-left: 3px solid var(--accent); padding: 6px 10px; border-radius: 4px; margin: 8px 0; }
+.explain-body .pits { margin: 6px 0; padding-left: 20px; }
+.explain-body .pits li { color: #b45309; margin: 3px 0; }
+.explain-body .ex { background: rgba(37, 99, 235, .06); border-radius: 6px; padding: 8px 12px; margin-top: 8px; }
+.explain-body .ex ol { margin: 4px 0 0; padding-left: 22px; }
+.explain-body .ex li { margin: 3px 0; }

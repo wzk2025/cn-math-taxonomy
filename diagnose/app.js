@@ -20,7 +20,7 @@
     ['选必三', '选必三 · 选择性必修第三册']
   ];
   const RESULT_LABEL = { correct: '对', wrong: '错', skip: '不会' };
-  const STATUS_LABEL = { mastered: '已掌握', shaky: '不稳', weak: '薄弱', unknown: '未测' };
+  const STATUS_LABEL = { mastered: '已掌握', shaky: '不稳', weak: '薄弱', unknown: '没测到' };
   const DIFF_LABEL = { basic: '基础', standard: '标准', advanced: '提高' };
   const TYPE_LABEL = { numeric: '数值题', choice: '选择题', short: '短答题', self: '开放题', legacy: '诊断题' };
 
@@ -104,6 +104,41 @@
   function lsGet(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 隐私模式等 */ } }
   function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }
+
+  /* ------------------------------------------------------------ 数学式渲染 */
+  // 题库题干/答案用 $...$ 包裹 LaTeX。优先 KaTeX（本地打包），没有则退化为纯文本清洗：
+  // 去掉 $、\frac{a}{b} -> (a/b)、x^2 -> x²、\\sqrt{a} -> √(a)、\times \div \pm \le \ge \ne \pi 等。
+  function texFallback(s) {
+    return s
+      .replace(/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '($1)/($2)')
+      .replace(/\\sqrt\s*\{([^{}]*)\}/g, '√($1)')
+      .replace(/\\times/g, '×').replace(/\\div/g, '÷').replace(/\\pm/g, '±')
+      .replace(/\\leq?/g, '≤').replace(/\\geq?/g, '≥').replace(/\\neq?/g, '≠')
+      .replace(/\\pi/g, 'π').replace(/\\angle/g, '∠').replace(/\\degree/g, '°')
+      .replace(/\\cdot/g, '·').replace(/\\perp/g, '⊥').replace(/\\parallel/g, '∥')
+      .replace(/([A-Za-z0-9π)\]])\^\s*\{?([0-9]+)\}?/g, function (_, base, exp) {
+        const sup = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+        return base + String(exp).split('').map(function (d) { return sup[+d]; }).join('');
+      })
+      .replace(/\$\s*/g, '').replace(/\s*\$/g, '');
+  }
+  // 返回 DOM 节点数组：含 $...$ 的段用 KaTeX 渲染；纯文本也做轻清洗（x^2 -> x² 等）
+  function mathNodes(str) {
+    const parts = String(str).split(/\$(.+?)\$/g);  // 偶数下标为普通文本，奇数下标为数学
+    if (parts.length === 1) return [document.createTextNode(texFallback(str))];
+    const out = [];
+    parts.forEach(function (p, i) {
+      if (!p) return;
+      if (i % 2 === 0) { out.push(document.createTextNode(p)); return; }
+      const span = document.createElement('span');
+      if (window.katex) {
+        try { window.katex.render(p, span, { throwOnError: false, output: 'html' }); }
+        catch (e) { span.textContent = texFallback('$' + p + '$'); }
+      } else span.textContent = texFallback(p);
+      out.push(span);
+    });
+    return out;
+  }
   function nameOf(id) { const t = D.graph.byId[id]; return t ? t.name : id; }
   function getSettings() {
     const st = lsGet(LS_SETTINGS) || {};
@@ -302,6 +337,7 @@
 
   function renderStart(errMsg) {
     const page = h('div');
+    page.append(reviewHint());
     const saved = lsGet(sessionKey());
     if (saved && saved.targets && D.graph.byId[saved.targets[0]]) {
       page.append(h('div', { class: 'banner' },
@@ -456,7 +492,11 @@
             h('button', {
               class: 'primary', title: '把本章全部 ' + ch.topics.length + ' 个知识点一起作为目标',
               onclick: function () { startSession(ch.topics.map(function (x) { return x.t.id; }), ch.volume + ' ' + ch.label + '（整章）'); }
-            }, '以整章为目标')),
+            }, '以整章为目标'),
+            h('button', {
+              title: '把本章题目排成练习卷，可打印到 A4 纸（文末附参考答案）',
+              onclick: function () { renderWorksheet(ch); }
+            }, '打印 A4 练习卷')),
           c.rows.map(function (x) {
             return h('div', { class: 'topic-row', title: x.t.description },
               h('span', { class: 'nm', text: x.t.name }),
@@ -473,9 +513,116 @@
     if (browser && q) browser.open = true;
   }
 
+  /* ------------------------------------------------------------ 练习卷（按章节打印 A4） */
+  let wsPer = 2;    // 每个知识点出几题（1–3）
+  let wsAns = true; // 打印时是否附参考答案页
+
+  // FNV-1a 字符串哈希 + mulberry32：确定性伪随机，同一个种子稳定选出同一批题（可复现/分享）
+  function hashStr(str) {
+    let x = 2166136261;
+    for (let i = 0; i < str.length; i++) { x ^= str.charCodeAt(i); x = Math.imul(x, 16777619); }
+    return x >>> 0;
+  }
+  function rngFor(seedStr) {
+    let a = hashStr(seedStr);
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // 按章节内知识点顺序分组选题；每个知识点独立洗牌取前 N 题；跳过自评题（不适合纸质卷）
+  function pickWorksheetQuestions(ch, per, seed) {
+    const groups = [];
+    let total = 0;
+    ch.topics.forEach(function (x) {
+      const bank = (D.graph.bank[x.t.id] || []).filter(function (q) { return q.type !== 'self'; });
+      if (!bank.length) return;
+      const rand = rngFor(seed + '|' + x.t.id);
+      const idx = bank.map(function (_, i) { return i; });
+      for (let i = idx.length - 1; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        const tmp = idx[i]; idx[i] = idx[j]; idx[j] = tmp;
+      }
+      const picked = idx.slice(0, Math.min(per, bank.length)).map(function (i) { return bank[i]; });
+      groups.push({ topic: x.t, questions: picked });
+      total += picked.length;
+    });
+    return { groups: groups, total: total };
+  }
+
+  function wsItem(num, q) {
+    const body = h('div', { class: 'ws-item' },
+      h('div', { class: 'ws-q' }, h('b', { text: num + '.' }), ' ', mathNodes(q.prompt)));
+    if (q.type === 'choice') {
+      const wrap = h('div', { class: 'ws-choices' });
+      (q.choices || []).forEach(function (c) { wrap.append(h('div', null, h('b', { text: c.key + '.' }), ' ', mathNodes(c.text))); });
+      body.append(wrap, h('div', { class: 'ws-blank short', text: '答：' }));
+    } else {
+      body.append(h('div', { class: 'ws-blank' }), h('div', { class: 'ws-blank tall' }));
+    }
+    return body;
+  }
+
+  function renderWorksheet(ch, seed) {
+    seed = seed || Math.random().toString(36).slice(2, 10);
+    const built = pickWorksheetQuestions(ch, wsPer, seed);
+    let num = 0;
+    const qBlocks = [];
+    const ansRows = [];
+    built.groups.forEach(function (g) {
+      qBlocks.push(h('div', { class: 'ws-topic muted small' }, '【' + g.topic.name + '】'));
+      g.questions.forEach(function (q) {
+        num++;
+        qBlocks.push(wsItem(num, q));
+        ansRows.push(h('div', { class: 'ws-ans' },
+          h('b', { text: num + '.' }), ' ', mathNodes(answerText(q)),
+          q.explanation ? h('span', { class: 'muted small' }, '　—— ', mathNodes(q.explanation)) : null));
+      });
+    });
+
+    const perSel = h('select', { onchange: function () {
+      const v = parseInt(perSel.value, 10);
+      if (v >= 1 && v <= 3) wsPer = v;
+      renderWorksheet(ch, seed);
+    } }, [1, 2, 3].map(function (n) { return h('option', { value: String(n), selected: n === wsPer }, '每个知识点 ' + n + ' 题'); }));
+    const ansCb = h('input', { type: 'checkbox', checked: wsAns, onchange: function () {
+      wsAns = ansCb.checked;
+      ansCard.classList.toggle('no-print', !wsAns);
+    } });
+
+    const ansCard = h('details', { class: 'card ws-answers', open: true },
+      h('summary', null, h('b', { text: '参考答案（共 ' + built.total + ' 题，打印时单独成页）' })),
+      h('p', { class: 'muted small' }, '自动判题与解析为 AI 生成草稿，建议家长对照解析批改。'),
+      ansRows);
+
+    const page = h('div', null,
+      h('div', { class: 'row no-print ws-ctl' },
+        h('button', { onclick: function () { renderStart(); } }, '← 返回'),
+        h('b', { text: ch.volume + ' · ' + ch.label }),
+        perSel,
+        h('button', { onclick: function () { renderWorksheet(ch, Math.random().toString(36).slice(2, 10)); } }, '换一批题'),
+        h('label', { class: 'small' }, ansCb, ' 卷末附答案'),
+        h('button', { class: 'primary', onclick: function () { window.print(); } }, '打印 / 另存为 PDF')),
+      h('div', { class: 'card ws-sheet' },
+        h('div', { class: 'ws-head' },
+          h('h2', { text: ch.volume + ' · ' + ch.label + ' 练习卷' }),
+          h('p', { class: 'ws-who' }, '班级：__________　姓名：__________　日期：__________'),
+          h('p', { class: 'muted small no-print' }, '共 ' + built.total + ' 题 · 生成于 ' + new Date().toLocaleString('zh-CN') + ' · 选题种子 ' + seed)),
+        built.total ? qBlocks : h('p', { class: 'muted' }, '本章没有可打印的练习题。')),
+      built.total ? ansCard : null);
+    show(page);
+  }
+
   /* ------------------------------------------------------------ 出题页 */
   function reasonFor(item) {
     const id = item.topicId;
+    // 连续答错的情绪保护：引擎正在往先修回溯，这恰是最沮丧的时刻
+    const recent = session.answers.slice(-3);
+    if (recent.length >= 2 && recent.every(function (a) { return a.result !== 'correct'; }))
+      return '没关系，这几题有点难是正常的——现在正在帮你找到是哪一环没接上，越往下问会越简单。';
     if (item.attempt === 2) return '第一题没答对，再出一道' + (item.question.difficulty === 'basic' ? '更基础' : '同级或更容易') + '的题确认：这一题也错才算薄弱，答对则标为「不稳」。';
     for (let i = session.answers.length - 1; i >= 0; i--) {
       const a = session.answers[i];
@@ -498,6 +645,22 @@
     renderQuestion(item);
   }
 
+  // 键盘作答：选择题按 A-D / 1-4 直接选中，回车提交；数值题回车提交（输入框自身已处理）
+  function questionKeydown(e) {
+    if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea') return;
+    const q = D && session && (function () { const it = E.nextItem(D.graph, session); return it ? it.question : null; })();
+    if (!q || q.type !== 'choice' || ui.phase !== 'ask') return;
+    const keys = (q.choices || []).map(function (c) { return c.key; });
+    const k = e.key.toUpperCase();
+    let hit = null;
+    if (keys.indexOf(k) >= 0) hit = k;
+    else if (/^[1-9]$/.test(e.key)) { const idx = +e.key - 1; if (keys[idx]) hit = keys[idx]; }
+    if (hit) { ui.picked = hit; ui.answer = hit; const it = E.nextItem(D.graph, session); renderQuestion(it); }
+  }
+  document.addEventListener('keydown', questionKeydown);
+
   function answerText(q) {
     if (q.type === 'choice') {
       const c = (q.choices || []).find(function (x) { return x.key === q.answer; });
@@ -506,10 +669,42 @@
     return q.answer;
   }
 
-  function feedbackBlock(q) {
+  /* 图解：该知识点若配有概念示意图，折一张卡片（open=true 时默认展开） */
+  function figureBlock(t, open) {
+    const F = window.CnmFigures;
+    if (!F) return null;
+    let fig = null;
+    try { fig = F.forTopic(t); } catch (e) { return null; }
+    if (!fig) return null;
+    const wrap = h('details', { class: 'figure-card', open: !!open },
+      h('summary', null, '🖼 图解 · ' + fig.title),
+      h('div', { class: 'figure-body' }));
+    wrap.querySelector('.figure-body').innerHTML = fig.svg + (fig.note ? '<p class="fig-note">' + fig.note + '</p>' : '');
+    return wrap;
+  }
+
+  /* 通俗讲解：生活化类比 + 口诀 + 易错点 + 例题（本期为核心概念编写，未覆盖的主题返回 null） */
+  function explainBlock(t, open) {
+    const E = window.CnmExplain;
+    if (!E) return null;
+    let e = null;
+    try { e = E.forTopic(t); } catch (err) { return null; }
+    if (!e) return null;
+    const wrap = h('details', { class: 'explain-card', open: !!open },
+      h('summary', null, '👨‍🏫 通俗讲解 · ' + e.title),
+      h('div', { class: 'explain-body' }));
+    wrap.querySelector('.explain-body').innerHTML = e.html;
+    return wrap;
+  }
+
+  function feedbackBlock(q, t, open) {
+    const fig = t ? figureBlock(t, open) : null;
+    const ex = t ? explainBlock(t, open) : null;
     return h('div', { class: 'feedback' },
-      h('div', { class: 'refans' }, h('b', null, '参考答案：'), answerText(q)),
-      q.explanation ? h('div', { class: 'explain', id: 'explain' }, h('b', null, '解析：'), q.explanation) : null);
+      h('div', { class: 'refans' }, h('b', null, '参考答案：'), mathNodes(answerText(q))),
+      q.explanation ? h('div', { class: 'explain', id: 'explain' }, h('b', null, '解析：'), mathNodes(q.explanation)) : null,
+      fig,
+      ex);
   }
 
   function renderQuestion(item) {
@@ -532,7 +727,7 @@
         h('span', { class: 'tag', text: TYPE_LABEL[q.type] || q.type }),
         h('span', { class: 'tag', text: '本知识点第 ' + item.attempt + ' 题' })),
       h('div', { class: 'reason', text: reasonFor(item) }),
-      h('div', { class: 'q-text', id: 'q-text', text: q.prompt }));
+      h('div', { class: 'q-text', id: 'q-text' }, mathNodes(q.prompt)));
 
     if (ui.phase === 'ask') {
       if (q.type === 'choice') {
@@ -540,7 +735,7 @@
           return h('button', {
             class: 'choice' + (ui.picked === c.key ? ' picked' : ''), id: 'choice-' + c.key, 'data-key': c.key,
             onclick: function () { ui.picked = c.key; ui.answer = c.key; renderQuestion(item); }
-          }, h('b', { text: c.key + '.' }), ' ', c.text);
+          }, h('b', { text: c.key + '.' }), ' ', mathNodes(c.text));
         })));
       } else if (q.type === 'self') {
         card.append(h('textarea', {
@@ -549,7 +744,9 @@
         }));
       } else {
         card.append(h('input', {
-          type: 'text', class: 'ans-input', id: 'ans', autocomplete: 'off', placeholder: '在这里输入答案（数字、分数、多个答案用逗号或“和”分开）', value: ui.answer,
+          type: 'text', class: 'ans-input', id: 'ans', autocomplete: 'off',
+          inputmode: q.type === 'numeric' ? 'decimal' : 'text',
+          placeholder: '在这里输入答案（数字、分数、多个答案用逗号或“和”分开）', value: ui.answer,
           oninput: function (e) { ui.answer = e.target.value; },
           onkeydown: function (e) { if (e.key === 'Enter' && !e.isComposing) judgeAndGo(item); }
         }));
@@ -563,7 +760,7 @@
       card.append(
         h('div', { class: 'muted' }, '你的答案：' + (q.type === 'choice' ? answerOfKey(q, ui.answer) : ui.answer)),
         h('div', { class: 'verdict ' + (ok ? 'ok' : 'no') }, ok ? '自动判定：正确' : '自动判定：不正确'),
-        feedbackBlock(q),
+        feedbackBlock(q, t, !ok),
         h('div', { class: 'row' },
           h('button', { class: 'primary', id: 'btn-next', onclick: function () { commit(ok ? 'correct' : 'wrong'); } }, '下一题'),
           h('button', { id: 'btn-flip', onclick: function () { commit(ok ? 'wrong' : 'correct'); } }, ok ? '判错了，我其实没做对' : '判错了，我其实做对了'),
@@ -571,14 +768,14 @@
     } else if (ui.phase === 'skip') {
       card.append(
         h('div', { class: 'muted' }, '你选择了「不会」。看一下答案和解析再继续：'),
-        feedbackBlock(q),
+        feedbackBlock(q, t, true),
         h('div', { class: 'row' }, h('button', { class: 'primary', id: 'btn-next', onclick: function () { commit('skip'); } }, '下一题')));
     } else {
       card.append(
         ui.answer ? h('div', { class: 'muted' }, '你的答案：' + ui.answer) : null,
         q.type === 'self' ? h('div', { class: 'muted' }, '开放题：请对照参考答案自己判断。')
           : (ui.verdict ? h('div', { class: 'muted' }, '这道题的答案无法被自动可靠地判定，请对照参考答案自己判断。') : null),
-        feedbackBlock(q),
+        feedbackBlock(q, t, false),
         h('div', { class: 'row' },
           h('button', { class: 'good', id: 'btn-right', onclick: function () { commit('correct'); } }, '对（我做对了）'),
           h('button', { class: 'bad', id: 'btn-wrong', onclick: function () { commit('wrong'); } }, '不对'),
@@ -739,6 +936,8 @@
     const body = h('div', { class: 'body' });
     body.append(h('div', { class: 'muted' }, (t.external ? '小学先修知识点（无诊断题）' : t.chapter) + (t.domain ? ' · ' + t.domain : '')));
     body.append(h('div', { text: t.description }));
+    body.append(figureBlock(t, false));
+    body.append(explainBlock(t, true));
     if (t.mastery_criteria && t.mastery_criteria.length) {
       body.append(h('div', null, h('b', null, '掌握标准：'), h('ul', null, t.mastery_criteria.map(function (m) { return h('li', { text: m }); }))));
     }
@@ -759,13 +958,131 @@
     const st = E.statusOf(session, id);
     const out = [];
     if (targetSet.has(id)) out.push(tag('target', '目标'));
-    if (rootSet.has(id)) out.push(tag('root', '根因'));
+    if (rootSet.has(id)) out.push(tag('root', '要先补'));
     out.push(tag(st, STATUS_LABEL[st]));
     if (D.graph.byId[id].external) out.push(tag('ext', '小学'));
     return out;
   }
 
+  const LS_MASTERY = 'cnmDiagnose.mastered.v1';
+  /* 间隔复习：FSRS 计算「今天到期」的知识点（或降级为3天前的薄弱提示），到期即提醒复测 */
+  function reviewHint() {
+    try {
+      // 首选 FSRS 到期队列
+      const due = fsrsDueToday();
+      if (due.length) {
+        const m = lsGet(LS_MASTERY) || {};
+        return h('div', { class: 'banner demo' },
+          '今天有 ' + due.length + ' 个知识点到了复习时间（按记忆曲线安排）· 先回画像页看看，或——',
+          h('button', { onclick: function () { startSession(due.slice(0, 12), '今日复习 ' + due.length + ' 个知识点'); } }, '现在就复习'));
+      }
+      // 降级：FSRS 还没数据（旧版本使用），沿用「3天前的薄弱点」提示
+      const m = JSON.parse(localStorage.getItem(LS_MASTERY) || 'null');
+      if (!m || !m.updatedAt || !m.weak || !m.weak.length) return null;
+      const days = (Date.now() - new Date(m.updatedAt).getTime()) / 86400000;
+      if (days < 3) return null;
+      const names = m.weak.slice(0, 4).map(nameOf).join('、') + (m.weak.length > 4 ? ' 等 ' + m.weak.length + ' 个' : '');
+      return h('div', { class: 'banner demo' },
+        '距上次诊断已过 ' + Math.floor(days) + ' 天。上次的「要先补」里还有：' + names + '。隔几天再测一次，记得更牢——',
+        h('button', { onclick: function () { startSession(m.weak, '复习：' + (m.label || '上次要补的知识点')); } }, '现在就复习'));
+    } catch (e) { return null; }
+  }
+
+  /* ------------------------------------------------------------ FSRS 复习调度 */
+  // ts-fsrs（本地打包）：把诊断结果映射为评分，计算每个知识点的下次复习日期。
+  // 评分映射：对->Good，不稳->Hard，要先补->Again。enable_short_term=false 关闭分钟级学习阶段。
+  const FSRS_LS_SCHED = 'cnmDiagnose.fsrsCards.v1';   // 知识点 -> ts-fsrs card 对象（可 JSON 序列化）
+  const FSRS = window.FSRS || null;
+  const fsrsScheduler = FSRS
+    ? FSRS.fsrs(FSRS.generatorParameters({ enable_short_term: false, enable_fuzz: true, desired_retention: 0.9 }))
+    : null;
+  // 诊断状态 -> FSRS 评分
+  const STATUS_TO_RATING = { mastered: 3 /*Good*/, shaky: 2 /*Hard*/, weak: 1 /*Again*/ };
+
+  function fsrsCardsMap() {
+    try { return JSON.parse(localStorage.getItem(FSRS_LS_SCHED) || '{}'); } catch (e) { return {}; }
+  }
+  function fsrsSaveCards(map) {
+    try { localStorage.setItem(FSRS_LS_SCHED, JSON.stringify(map)); } catch (e) { /* ignore */ }
+  }
+  // 用 FSRS 更新一个知识点的复习计划；返回更新后的 {card, dueISO}，库缺失时退化为简单规则
+  function fsrsReview(topicId, status, now) {
+    const cards = fsrsCardsMap();
+    const when = now || new Date();
+    let card = cards[topicId];
+    if (!fsrsScheduler) {
+      const gapDays = status === 'weak' ? 1 : status === 'shaky' ? 3 : 7;
+      const due = new Date(when.getTime() + gapDays * 86400000);
+      return { dueISO: due.toISOString(), days: gapDays };
+    }
+    if (!card) card = FSRS.createEmptyCard(when);
+    else card = FSRS.fixState ? FSRS.fixState(card) : card;  // 反序列化后恢复 State 枚举
+    const rating = STATUS_TO_RATING[status] || 3;
+    const result = fsrsScheduler.next(card, when, rating);
+    cards[topicId] = result.card;
+    fsrsSaveCards(cards);
+    return {
+      dueISO: new Date(result.card.due).toISOString(),
+      days: result.card.scheduled_days,
+      stability: result.card.stability
+    };
+  }
+  // 画像/开始页用：列出今天到期（或已逾期）的知识点
+  function fsrsDueToday() {
+    const cards = fsrsCardsMap();
+    const today = new Date(); today.setHours(23, 59, 59, 999);
+    return Object.keys(cards).filter(function (id) { return new Date(cards[id].due) <= today; });
+  }
+  // 供画像页复用（画像页加载 engine.js，不加载 app.js）
+  window.CnmFSRS = { cardsMap: fsrsCardsMap, review: fsrsReview, dueToday: fsrsDueToday, STATUS_TO_RATING: STATUS_TO_RATING };
+
+  /* 把最新一次诊断的结果写入共享 localStorage：
+   * - mastered.v1：最近一次的汇总（开始页复习提示用）
+   * - topicStatus.v1：按知识点合并的状态表（本次测到的点覆盖旧状态），学习画像页用
+   * - history.v1：诊断历史（近邻去重：结果页更正答案重渲染时只更新最后一条）
+   */
+  function publishMastery() {
+    try {
+      const sum = E.summarize(D.graph, session);
+      localStorage.setItem('cnmDiagnose.mastered.v1', JSON.stringify({
+        mastered: sum.mastered, shaky: sum.shaky, weak: sum.weak,
+        updatedAt: new Date().toISOString(), label: sessionMeta.label
+      }));
+      const ts = Date.now();
+      const st = JSON.parse(localStorage.getItem('cnmDiagnose.topicStatus.v1') || '{}');
+      sum.mastered.forEach(function (id) { st[id] = { s: 'mastered', t: ts }; });
+      sum.shaky.forEach(function (id) { st[id] = { s: 'shaky', t: ts }; });
+      sum.weak.forEach(function (id) { st[id] = { s: 'weak', t: ts }; });
+      localStorage.setItem('cnmDiagnose.topicStatus.v1', JSON.stringify(st));
+      // FSRS：为本次测到的每个知识点计算下次复习日期，写入 nextDue 供画像/开始页用
+      const nextDue = {};
+      const applyFsrs = function (ids, status) {
+        ids.forEach(function (id) {
+          try { nextDue[id] = fsrsReview(id, status, new Date(ts)); } catch (e) { /* 单点失败不影响整体 */ }
+        });
+      };
+      applyFsrs(sum.mastered, 'mastered');
+      applyFsrs(sum.shaky, 'shaky');
+      applyFsrs(sum.weak, 'weak');
+      localStorage.setItem('cnmDiagnose.nextDue.v1', JSON.stringify(nextDue));
+      const hist = JSON.parse(localStorage.getItem('cnmDiagnose.history.v1') || '[]');
+      const entry = {
+        t: ts, label: sessionMeta.label, targets: session.targets.slice(),
+        asked: sum.asked, limit: session.limit,
+        weak: sum.weak, shaky: sum.shaky,
+        masteredCount: sum.mastered.length, untestedCount: sum.untested.length,
+        limitReached: !!sum.limitReached
+      };
+      const last = hist[hist.length - 1];
+      if (last && last.label === entry.label && last.asked === entry.asked) hist[hist.length - 1] = entry;
+      else hist.push(entry);
+      while (hist.length > 200) hist.shift();
+      localStorage.setItem('cnmDiagnose.history.v1', JSON.stringify(hist));
+    } catch (e) { /* ignore */ }
+  }
+
   function renderResult() {
+    publishMastery();
     const sum = E.summarize(D.graph, session);
     const rootSet = new Set(sum.roots.map(function (r) { return r.id; }));
     const screen = session.mode === 'screen';
@@ -776,6 +1093,9 @@
     const targetsMastered = session.targets.every(function (id) { return E.statusOf(session, id) === 'mastered'; });
     const chapters = screen ? E.chapterSummary(D.graph, session) : null;
     const outOfScope = screen ? sum.roots.filter(function (r) { return r.outOfScopePrereqs.length; }) : [];
+    const targetNames = session.targets.length <= 3 ? session.targets.map(nameOf).join('、')
+      : session.targets.slice(0, 2).map(nameOf).join('、') + ' 等 ' + session.targets.length + ' 个知识点';
+    const pathLen = sum.path.length;
     let headline;
     if (screen) {
       if (!sum.weak.length && !sum.shaky.length) headline = sum.untested.length
@@ -784,10 +1104,10 @@
       else headline = '范围内共 ' + session.targets.length + ' 个知识点：薄弱 ' + sum.weak.length + '、不稳 ' + sum.shaky.length + '、未测 ' + sum.untested.length +
         '。先看下面的「按章汇总」，薄弱的章排在前面。';
     }
-    else if (!sum.roots.length && !sum.shaky.length && targetsMastered) headline = '目标知识点已掌握，没有发现需要补的先修。';
-    else if (!sum.roots.length && !sum.shaky.length) headline = '没有判出薄弱点，但目标尚未全部测到。';
-    else if (!sum.roots.length) headline = '没有判出薄弱点，但有 ' + sum.shaky.length + ' 个知识点「不稳」（第一题没答对、第二题答对），建议巩固。';
-    else headline = '共发现 ' + sum.roots.length + ' 个薄弱根因' + (sum.shaky.length ? '、' + sum.shaky.length + ' 个不稳的知识点' : '') + '，按下面的学习路径从前往后补。';
+    else if (!sum.roots.length && !sum.shaky.length && targetsMastered) headline = '太棒了，「' + targetNames + '」你已掌握，先修也都没问题 ✅';
+    else if (!sum.roots.length && !sum.shaky.length) headline = '目前没有发现要补的，继续答几题就能把「' + targetNames + '」完全测完。';
+    else if (!sum.roots.length) headline = '你离掌握「' + targetNames + '」很近了：' + sum.shaky.length + ' 个知识点有点不稳，巩固一下就好。';
+    else headline = '你离学会「' + targetNames + '」还差 ' + pathLen + ' 个基础点，别担心——下面已经帮你按顺序排好，从第一个开始补就行。';
 
     const more = screen ? 10 : 4;
     const summaryCard = h('div', { class: 'card', id: 'summary' },
@@ -813,8 +1133,8 @@
     if (screen) page.append(chaptersCard(chapters, outOfScope));
 
     page.append(h('div', { class: 'card', id: 'roots' },
-      h('h2', { text: '薄弱的先修知识点（根因）' }),
-      h('p', { class: 'muted small' }, '根因 = 被判为薄弱、且它的直接先修里没有薄弱点的知识点。点击展开看描述、掌握标准和课标条目。'),
+      h('h2', { text: '要先补的知识点' }),
+      h('p', { class: 'muted small' }, '这些是最需要先补的点（补它们的「根」）。点击展开看描述、掌握标准和课标条目。'),
       sum.roots.length ? sum.roots.map(function (r) {
         const notes = h('div');
         if (r.pendingPrereqs.length) notes.append(h('div', { class: 'notice', text: '它的先修「' + r.pendingPrereqs.map(nameOf).join('」「') + '」没来得及测（题量用完），真正的根因可能更靠前。' }));
@@ -824,15 +1144,22 @@
       }) : h('p', { text: targetsMastered ? '没有。' : '暂未发现。' })));
 
     page.append(h('div', { class: 'card', id: 'shaky' },
-      h('h2', { text: '不稳的知识点（' + sum.shaky.length + '）' }),
-      h('p', { class: 'muted small' }, '第一题没答对，但第二题（同级或更容易）答对了：可能是粗心，也可能掌握得不牢。它们会出现在学习路径里需要巩固，但工具没有继续向它们的先修回溯（只有两题都错才回溯）。'),
+      h('h2', { text: '有点不稳的知识点（' + sum.shaky.length + '）' }),
+      h('p', { class: 'muted small' }, '第一题没答对，但第二题（更简单的）答对了：可能是粗心，也可能掌握得不牢。建议把它们也巩固一下。'),
       sum.shaky.length ? sum.shaky.map(function (id) { return topicItem(id, statusTags(id, rootSet, targetSet)); }) : h('p', { text: '没有。' })));
 
     page.append(h('div', { class: 'card', id: 'path' },
       h('h2', { text: '推荐学习路径' }),
       h('p', { class: 'muted small' }, '从根因（和「不稳」的点）出发到目标之间、尚未判定为掌握的知识点，按年级从低到高排列（同一年级里先修在前），从上往下学。「不稳」「未测」的点也在路径上，建议先巩固 / 自查。'),
       sum.path.length ? h('ol', { class: 'path' }, sum.path.map(function (p) {
-        return h('li', null, topicItem(p.id, statusTags(p.id, rootSet, targetSet)));
+        return h('li', null, topicItem(p.id, statusTags(p.id, rootSet, targetSet),
+          h('div', { class: 'row no-print', style: 'margin-top:6px' },
+            h('button', {
+              onclick: function () {
+                if (confirm('把「' + nameOf(p.id) + '」作为新目标开始一次诊断吗？（当前结果仍可在答题记录里查看，但会被新的诊断覆盖）'))
+                  startSession([p.id], nameOf(p.id));
+              }
+            }, '学完了？测一测它'))));
       })) : h('p', { text: '不需要补课。' })));
 
     page.append(h('div', { class: 'card', id: 'graph' },
@@ -935,7 +1262,7 @@
         }
       }, ['correct', 'wrong', 'skip'].map(function (r) { return h('option', { value: r, selected: r === a.result }, RESULT_LABEL[r]); }));
       return h('tr', null, h('td', { text: String(i + 1) }),
-        h('td', null, nameOf(a.id), h('div', { class: 'muted small', text: q.prompt.length > 60 ? q.prompt.slice(0, 59) + '…' : q.prompt })),
+        h('td', null, nameOf(a.id), h('div', { class: 'muted small' }, q.prompt.length > 60 ? mathNodes(q.prompt.slice(0, 59) + '…') : mathNodes(q.prompt))),
         h('td', { class: 'muted', text: a.text || '' }),
         h('td', null, sel), h('td', { class: 'muted', text: q.answer }));
     });
@@ -1209,6 +1536,17 @@
       return;
     }
     const params = new URLSearchParams(location.search);
+    // ?worksheet=章节key（如 “七上 第三章”）：直接打开该章的可打印练习卷
+    const wsKey = params.get('worksheet');
+    if (wsKey) {
+      let hit = null;
+      VOLUMES.forEach(function (vv) {
+        ((D.tree[vv[0]] || {}).chapters || []).forEach(function (ch) { if (ch.key === wsKey.trim()) hit = ch; });
+      });
+      if (!hit) { renderStart('URL 参数 worksheet 没有匹配的章节：' + wsKey + '（格式如 “七上 第三章”）'); return; }
+      renderWorksheet(hit, params.get('wsseed') || undefined);
+      return;
+    }
     let resolved = null;
     try { resolved = resolveTargets(params); } catch (e) { renderStart(e.message); return; }
     if (params.get('seed')) seedParam = params.get('seed');
